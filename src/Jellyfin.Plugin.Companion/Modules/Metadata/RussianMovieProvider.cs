@@ -695,32 +695,8 @@ LIMIT 1";
                 using var httpClient = new HttpClient(handler, disposeHandler: true);
                 httpClient.Timeout = TimeSpan.FromSeconds(5);
 
-                var query = Uri.EscapeDataString(searchInfo.Name);
-                var searchUrl = $"{TmdbApiBase}/search/movie?api_key={Uri.EscapeDataString(tmdbApiKey)}&language=ru-RU&query={query}";
-
-                using var response = await httpClient.GetAsync(searchUrl, cancellationToken);
-                if (response.IsSuccessStatusCode)
-                {
-                    var json = await response.Content.ReadAsStringAsync(cancellationToken);
-                    var searchResult = JsonSerializer.Deserialize<TmdbSearchResponse>(json, JsonOptions.Default);
-                    if (searchResult?.Results != null)
-                    {
-                        foreach (var m in searchResult.Results)
-                        {
-                            var sr = new RemoteSearchResult
-                            {
-                                Name = m.Title ?? m.OriginalTitle ?? "Unknown",
-                                Overview = m.Overview,
-                                SearchProviderName = Name,
-                                ProductionYear = m.ReleaseDate?.Length >= 4
-                                    && int.TryParse(m.ReleaseDate[..4], out var yr) ? yr : null
-                            };
-                            sr.SetProviderId("Tmdb", m.Id.ToString(CultureInfo.InvariantCulture));
-                            results.Add(sr);
-                        }
-                        return results;
-                    }
-                }
+                var matches = await MovieManualSearch.SearchAsync(httpClient, tmdbApiKey, searchInfo, Name, cancellationToken);
+                if (matches.Count > 0) return matches;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
