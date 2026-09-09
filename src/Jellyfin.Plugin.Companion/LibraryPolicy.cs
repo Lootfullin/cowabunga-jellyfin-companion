@@ -71,6 +71,11 @@ public sealed class LibraryPolicy(ILibraryManager libraryManager)
     public static bool AllowsPath(CompanionModule module, string? path) =>
         Enabled(module) && CompanionPlugin.Policy?.ForPath(module, path) == true;
 
+    // Jellyfin omits the item's path in manual search requests. Searching is read-only;
+    // actual metadata application must still pass AllowsPath/Allows for the real item.
+    public static bool AllowsMetadataSearch(string? path) => Enabled(CompanionModule.Metadata)
+        && (string.IsNullOrWhiteSpace(path) || AllowsPath(CompanionModule.Metadata, path));
+
     public bool ForLibrary(CompanionModule module, Guid id)
     {
         var config = CompanionPlugin.GetConfiguration();

@@ -593,7 +593,7 @@ LIMIT 1";
 
     public async Task<IEnumerable<RemoteSearchResult>> GetSearchResults(SeriesInfo searchInfo, CancellationToken cancellationToken)
     {
-        if (!LibraryPolicy.AllowsPath(CompanionModule.Metadata, searchInfo.Path)) return Array.Empty<RemoteSearchResult>();
+        if (!LibraryPolicy.AllowsMetadataSearch(searchInfo.Path)) return Array.Empty<RemoteSearchResult>();
 
         var results = new List<RemoteSearchResult>();
 

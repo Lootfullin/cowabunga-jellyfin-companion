@@ -53,7 +53,7 @@ public partial class RussianMovieProvider :
         MetadataRefreshOptions options,
         CancellationToken cancellationToken)
     {
-        if (!LibraryPolicy.Allows(CompanionModule.Metadata, item)) return ItemUpdateType.None;
+        if (!LibraryPolicy.Allows(CompanionModule.Metadata, item) || item.IsLocked) return ItemUpdateType.None;
 
         var config = CurrentPlugin.Configuration;
         int? tmdbId = MovieLookup.ExtractTmdbId(item.ProviderIds);
@@ -135,7 +135,7 @@ public partial class RussianMovieProvider :
             var changed = identityChanged
                 | ApplyTmdbCollection(item, details.BelongsToCollection);
             var russianTitle = MovieTextLocalization.RussianOrNull(details.Title);
-            if (config.EnableRussianTitles
+            if (config.EnableRussianTitles && !item.LockedFields.Contains(MetadataField.Name)
                 && !string.IsNullOrWhiteSpace(russianTitle)
                 && !string.Equals(item.Name, russianTitle, StringComparison.Ordinal))
             {
@@ -149,6 +149,7 @@ public partial class RussianMovieProvider :
                     russianTitle);
             }
 
+            changed |= MovieTextLocalization.ApplyDescription(item, details.Overview, details.Tagline, config);
             return changed ? ItemUpdateType.MetadataEdit : ItemUpdateType.None;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -678,7 +679,7 @@ LIMIT 1";
 
     public async Task<IEnumerable<RemoteSearchResult>> GetSearchResults(MovieInfo searchInfo, CancellationToken cancellationToken)
     {
-        if (!LibraryPolicy.AllowsPath(CompanionModule.Metadata, searchInfo.Path)) return Array.Empty<RemoteSearchResult>();
+        if (!LibraryPolicy.AllowsMetadataSearch(searchInfo.Path)) return Array.Empty<RemoteSearchResult>();
 
         var results = new List<RemoteSearchResult>();
 

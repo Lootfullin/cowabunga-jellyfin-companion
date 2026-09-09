@@ -4,6 +4,27 @@ namespace RussianMetadata;
 
 internal static class MovieTextLocalization
 {
+    internal static bool ApplyDescription(MediaBrowser.Controller.Entities.Movies.Movie item,
+        string? overview, string? tagline, Jellyfin.Plugin.Companion.Configuration.PluginConfiguration config)
+    {
+        if (item.IsLocked) return false;
+        var changed = false;
+        var russianOverview = RussianOrNull(overview);
+        if (config.EnableRussianOverviews && !item.LockedFields.Contains(MediaBrowser.Model.Entities.MetadataField.Overview)
+            && russianOverview is not null && item.Overview != russianOverview)
+        {
+            item.Overview = russianOverview;
+            changed = true;
+        }
+        var russianTagline = RussianOrNull(tagline);
+        if (config.EnableRussianTaglines
+            && russianTagline is not null && item.Tagline != russianTagline)
+        {
+            item.Tagline = russianTagline;
+            changed = true;
+        }
+        return changed;
+    }
     public static bool ContainsCyrillic(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
