@@ -41,7 +41,8 @@ public sealed class RussianMovieImageProvider : IRemoteImageProvider, IDisposabl
     private PluginConfiguration Configuration =>
         CompanionPlugin.Instance?.Configuration ?? new PluginConfiguration();
 
-    public bool Supports(BaseItem item) => item is Movie;
+    public bool Supports(BaseItem item) => item is Movie && (item.Id == Guid.Empty
+        || (Configuration.MetadataImagesEnabled && LibraryPolicy.Allows(CompanionModule.Metadata, item)));
 
     public IEnumerable<ImageType> GetSupportedImages(BaseItem item)
     {

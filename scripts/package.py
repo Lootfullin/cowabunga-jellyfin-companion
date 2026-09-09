@@ -3,14 +3,14 @@ from pathlib import Path
 import datetime, hashlib, json, zipfile
 
 root = Path(__file__).resolve().parent.parent
-version = '1.0.4'
+version = '1.0.5'
 dll = root / 'src/Jellyfin.Plugin.Companion/bin/Release/net10.0/Jellyfin.Plugin.Companion.dll'
 if not dll.is_file():
     raise SystemExit('Run dotnet test -c Release for Companion.Tests before packaging.')
 output = root / 'artifacts'
 output.mkdir(exist_ok=True)
 archive = output / f'Cowabunga.Jellyfin.Companion_{version}_jellyfin-12.0.zip'
-metadata = dict(category='General', changelog='Restore Russian manual movie/series search for pathless Jellyfin requests. Apply Russian movie overview and tagline after identification while respecting localization settings and metadata locks.',
+metadata = dict(category='General', changelog='Hide disabled Language Artwork from item image search while preserving library provider discovery. Add Companion settings to the dashboard sidebar.',
     description='Media recognition, localized metadata and Cowabunga artwork with per-library controls.',
     guid='0a281de0-d3c8-43ef-bf2d-5fac17fbb8c6', name='Cowabunga Jellyfin Companion',
     overview='Smart Resolver, Choose your Meta and Custom Artwork in one plugin.', owner='Lootfullin',

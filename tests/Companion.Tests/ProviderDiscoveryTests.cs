@@ -8,6 +8,32 @@ using RussianMetadata;
 public sealed class ProviderDiscoveryTests
 {
     [Fact]
+    public void LanguageArtworkHidesForDisabledRealItemsButRemainsDiscoverable()
+    {
+        using var context = new CompanionTestContext();
+        using var movies = new RussianMovieImageProvider(NullLogger<RussianMovieImageProvider>.Instance);
+        using var collections = new ChooseYourMetaBoxSetImageProvider(NullLogger<ChooseYourMetaBoxSetImageProvider>.Instance);
+        var movie = new Movie { Id = Guid.NewGuid(), Path = Path.Combine(context.Root, "movie.mkv") };
+        var collection = new BoxSet { Id = Guid.NewGuid() };
+        context.Config.CollectionMetadataEnabled = true;
+        Assert.True(movies.Supports(movie));
+        Assert.True(collections.Supports(collection));
+        context.Config.MetadataImagesEnabled = false;
+        Assert.False(movies.Supports(movie));
+        Assert.False(collections.Supports(collection));
+        Assert.True(movies.Supports(new Movie()));
+        Assert.True(collections.Supports(new BoxSet()));
+        context.Config.MetadataImagesEnabled = true;
+        context.Config.AllLibraries = false;
+        context.Config.CollectionMetadataEnabled = false;
+        Assert.False(movies.Supports(movie));
+        Assert.False(collections.Supports(collection));
+        context.Config.AllLibraries = true;
+        context.Config.MetadataEnabled = false;
+        Assert.False(movies.Supports(movie));
+    }
+
+    [Fact]
     public async Task ProvidersAdvertiseTypesButDoNotFetchOutsideEnabledLibraries()
     {
         using var context = new CompanionTestContext(false);

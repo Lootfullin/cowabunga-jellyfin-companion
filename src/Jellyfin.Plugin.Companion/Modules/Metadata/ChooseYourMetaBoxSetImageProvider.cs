@@ -42,7 +42,8 @@ public sealed class ChooseYourMetaBoxSetImageProvider
     private PluginConfiguration Configuration =>
         CompanionPlugin.Instance?.Configuration ?? new PluginConfiguration();
 
-    public bool Supports(BaseItem item) => item is BoxSet;
+    public bool Supports(BaseItem item) => item is BoxSet && (item.Id == Guid.Empty
+        || (Configuration.MetadataImagesEnabled && LibraryPolicy.Allows(CompanionModule.Metadata, item)));
 
     public IEnumerable<ImageType> GetSupportedImages(BaseItem item)
     {

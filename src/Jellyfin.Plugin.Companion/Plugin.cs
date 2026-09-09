@@ -43,6 +43,9 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
             {
                 Name = "Cowabunga" + page,
                 DisplayName = page == "Companion" ? Name : $"{Name}: {page}",
+                EnableInMainMenu = page == "Companion",
+                MenuSection = "server",
+                MenuIcon = "movie",
                 EmbeddedResourcePath = $"Jellyfin.Plugin.Companion.Web.{page}.html"
             };
     }
