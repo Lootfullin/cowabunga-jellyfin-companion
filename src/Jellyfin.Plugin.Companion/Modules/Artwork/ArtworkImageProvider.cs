@@ -25,9 +25,8 @@ public sealed class ArtworkImageProvider : IRemoteImageProvider, IImageProvider,
 
     public int Order => 0;
 
-    public bool Supports(BaseItem item) => LibraryPolicy.Allows(CompanionModule.Artwork, item)
-        && item is Movie or Series or Season or BoxSet
-        && (CompanionPlugin.GetConfiguration().StorageMode != PluginConfiguration.MediaFolderStorage || item is BoxSet);
+    // Jellyfin uses a dummy item outside every library to discover providers in its settings.
+    public bool Supports(BaseItem item) => item is Movie or Series or Season or BoxSet;
 
     public IEnumerable<ImageType> GetSupportedImages(BaseItem item)
     {
@@ -47,7 +46,9 @@ public sealed class ArtworkImageProvider : IRemoteImageProvider, IImageProvider,
         BaseItem item,
         CancellationToken cancellationToken)
     {
-        if (!Supports(item)) return Array.Empty<RemoteImageInfo>();
+        if (!Supports(item) || !LibraryPolicy.Allows(CompanionModule.Artwork, item)
+            || (CompanionPlugin.GetConfiguration().StorageMode == PluginConfiguration.MediaFolderStorage && item is not BoxSet))
+            return Array.Empty<RemoteImageInfo>();
 
         var configuration = CompanionPlugin.Instance?.Configuration;
         if (configuration is null)

@@ -42,7 +42,7 @@ public sealed class ChooseYourMetaBoxSetImageProvider
     private PluginConfiguration Configuration =>
         CompanionPlugin.Instance?.Configuration ?? new PluginConfiguration();
 
-    public bool Supports(BaseItem item) => CompanionPlugin.GetConfiguration().MetadataImagesEnabled && LibraryPolicy.Allows(CompanionModule.Metadata, item) && (item is BoxSet);
+    public bool Supports(BaseItem item) => item is BoxSet;
 
     public IEnumerable<ImageType> GetSupportedImages(BaseItem item)
     {
@@ -63,7 +63,8 @@ public sealed class ChooseYourMetaBoxSetImageProvider
         BaseItem item,
         CancellationToken cancellationToken)
     {
-        if (!Supports(item)) return Array.Empty<RemoteImageInfo>();
+        if (!Supports(item) || !CompanionPlugin.GetConfiguration().MetadataImagesEnabled
+            || !LibraryPolicy.Allows(CompanionModule.Metadata, item)) return Array.Empty<RemoteImageInfo>();
 
         var config = Configuration;
         var tmdbId = ParseTmdbId(item.GetProviderId(MetadataProvider.Tmdb));

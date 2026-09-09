@@ -41,7 +41,7 @@ public sealed class RussianMovieImageProvider : IRemoteImageProvider, IDisposabl
     private PluginConfiguration Configuration =>
         CompanionPlugin.Instance?.Configuration ?? new PluginConfiguration();
 
-    public bool Supports(BaseItem item) => CompanionPlugin.GetConfiguration().MetadataImagesEnabled && LibraryPolicy.Allows(CompanionModule.Metadata, item) && (item is Movie);
+    public bool Supports(BaseItem item) => item is Movie;
 
     public IEnumerable<ImageType> GetSupportedImages(BaseItem item)
     {
@@ -67,7 +67,8 @@ public sealed class RussianMovieImageProvider : IRemoteImageProvider, IDisposabl
         BaseItem item,
         CancellationToken cancellationToken)
     {
-        if (!Supports(item)) return Array.Empty<RemoteImageInfo>();
+        if (!Supports(item) || !CompanionPlugin.GetConfiguration().MetadataImagesEnabled
+            || !LibraryPolicy.Allows(CompanionModule.Metadata, item)) return Array.Empty<RemoteImageInfo>();
 
         var config = Configuration;
         var tmdbApiKey = TmdbApiKeyResolver.Resolve(config);
