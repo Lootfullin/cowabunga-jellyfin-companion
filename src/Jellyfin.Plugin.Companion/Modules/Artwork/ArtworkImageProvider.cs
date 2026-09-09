@@ -46,8 +46,9 @@ public sealed class ArtworkImageProvider : IRemoteImageProvider, IImageProvider,
         BaseItem item,
         CancellationToken cancellationToken)
     {
-        if (!Supports(item) || !LibraryPolicy.Allows(CompanionModule.Artwork, item)
-            || (CompanionPlugin.GetConfiguration().StorageMode == PluginConfiguration.MediaFolderStorage && item is not BoxSet))
+        // Listing candidates does not write files. The storage mode belongs to the
+        // background writer; filtering here also hides manual image search in Jellyfin.
+        if (!Supports(item) || !LibraryPolicy.Allows(CompanionModule.Artwork, item))
             return Array.Empty<RemoteImageInfo>();
 
         var configuration = CompanionPlugin.Instance?.Configuration;
