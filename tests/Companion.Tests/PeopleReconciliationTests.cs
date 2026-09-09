@@ -57,7 +57,9 @@ public class PeopleReconciliationTests
         Assert.Equal(0, rewritten[0].SortOrder);
         Assert.Equal(PersonKind.Producer, rewritten[1].Type);
         Assert.Equal("Executive Producer", rewritten[1].Role);
-        Assert.Same(credits[2], rewritten[2]);
+        Assert.NotSame(credits[2], rewritten[2]);
+        Assert.Equal(credits[2].Name, rewritten[2].Name);
+        Assert.Equal(credits[2].Role, rewritten[2].Role);
         Assert.Equal("Tom Hardy", credits[0].Name);
         Assert.Null(ReconcilePeopleTask.Rewrite(rewritten, aliases));
     }
@@ -71,6 +73,23 @@ public class PeopleReconciliationTests
         Assert.Empty(ReconcilePeopleTask.BuildAliases([Card("Tom Hardy"), locked]));
         locked.IsLocked = false; locked.LockedFields = [MetadataField.Name];
         Assert.Empty(ReconcilePeopleTask.BuildAliases([Card("Tom Hardy"), locked]));
+    }
+
+    [Fact]
+    public void UnchangedCyrillicCreditsNeverReusePersistedDatabaseIds()
+    {
+        var aliases = ReconcilePeopleTask.BuildAliases([Card("Tom Hardy"), Card("Том Харди")]);
+        var existing = new PersonInfo { Id = Guid.NewGuid(), Name = "Сергей Проверочный", Role = "Unchanged role", Type = PersonKind.Actor, SortOrder = 2, ImageUrl = "https://example.test/person.jpg" };
+        existing.ProviderIds["Tmdb"] = "12345";
+        var credits = new[] { new PersonInfo { Name = "Tom Hardy", Type = PersonKind.Actor }, existing };
+        var rewritten = ReconcilePeopleTask.Rewrite(credits, aliases)!;
+        Assert.All(rewritten, person => Assert.DoesNotContain(credits, original => original.Id == person.Id));
+        Assert.Equal(existing.Name, rewritten[1].Name);
+        Assert.Equal(existing.Role, rewritten[1].Role);
+        Assert.Equal(existing.SortOrder, rewritten[1].SortOrder);
+        Assert.Equal(existing.ImageUrl, rewritten[1].ImageUrl);
+        Assert.Equal(existing.ProviderIds, rewritten[1].ProviderIds);
+        Assert.NotSame(existing.ProviderIds, rewritten[1].ProviderIds);
     }
 
     [Fact]

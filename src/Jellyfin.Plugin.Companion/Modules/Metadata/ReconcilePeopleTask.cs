@@ -93,7 +93,15 @@ public sealed class ReconcilePeopleTask(ILibraryManager library, ILogger<Reconci
         {
             if (!aliases.TryGetValue(credit.Name, out var person)
                 || credit.ProviderIds.Any(pair => person.ProviderIds.TryGetValue(pair.Key, out var value) && !string.Equals(pair.Value, value, StringComparison.OrdinalIgnoreCase)))
-            { result.Add(credit); continue; }
+            {
+                // Database rows returned by GetPeople carry persistent Peoples.Id values.
+                // Never pass those IDs back as insert candidates: Jellyfin may not match a
+                // Unicode name using SQLite's case folding and try to insert that same ID.
+                result.Add(new PersonInfo { Name = credit.Name, Role = credit.Role, Type = credit.Type,
+                    SortOrder = credit.SortOrder, ImageUrl = credit.ImageUrl,
+                    ProviderIds = new Dictionary<string, string>(credit.ProviderIds, StringComparer.OrdinalIgnoreCase) });
+                continue;
+            }
             var ids = new Dictionary<string, string>(credit.ProviderIds, StringComparer.OrdinalIgnoreCase);
             foreach (var pair in person.ProviderIds) ids.TryAdd(pair.Key, pair.Value);
             result.Add(new PersonInfo { Name = person.Name, Role = credit.Role, Type = credit.Type, SortOrder = credit.SortOrder, ImageUrl = credit.ImageUrl, ProviderIds = ids });
