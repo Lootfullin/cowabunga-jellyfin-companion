@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Jellyfin Smart Resolver</title>
+</head>
+<body>
+<div id="SmartResolverConfigPage"
+     data-role="page"
+     class="page type-interior pluginConfigurationPage"
+     data-require="emby-input,emby-button,emby-checkbox,emby-select">
+    <style>
+        .smartResolverGrid { display: grid; gap: 1em; }
+        .smartResolverCard { padding: 1em; border-radius: .4em; background: rgba(255,255,255,.04); }
+        .smartResolverResult { white-space: pre-wrap; overflow-wrap: anywhere; }
+        .smartResolverHistory { display: grid; gap: .6em; margin-top: 1em; }
+        .smartResolverHistoryItem { padding: .8em; border-left: .3em solid #888; background: rgba(255,255,255,.04); }
+        .smartResolverHistoryItem.accepted { border-left-color: #52b54b; }
+        .smartResolverHistoryItem.rejected { border-left-color: #d9534f; }
+        .smartResolverMuted { opacity: .7; }
+    </style>
+    <div data-role="content">
+        <div class="content-primary smartResolverGrid">
+            <form id="SmartResolverConfigForm">
+                <p><a is="emby-link" href="#/configurationpage?name=CowabungaCompanion">← Cowabunga Jellyfin Companion</a></p>
+                <h1>Jellyfin Smart Resolver</h1>
+                <p data-i18n="intro"></p>
+
+                <label class="emby-checkbox-label">
+                    <input id="Enabled" type="checkbox" is="emby-checkbox">
+                    <span data-i18n="enabled"></span>
+                </label>
+
+                <h2 data-i18n="seriesHeading"></h2>
+                <label class="emby-checkbox-label">
+                    <input id="NestedSeriesEnabled" type="checkbox" is="emby-checkbox">
+                    <span data-i18n="seriesEnabled"></span>
+                </label>
+                <div class="selectContainer">
+                    <label class="selectLabel" for="NestedSeriesMode" data-i18n="seriesMode"></label>
+                    <select id="NestedSeriesMode" is="emby-select">
+                        <option value="0" data-i18n="modeYear"></option>
+                        <option value="1" data-i18n="modeAny"></option>
+                        <option value="2" data-i18n="modePattern"></option>
+                    </select>
+                </div>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="CustomRegex"
+                           data-i18n="customPattern"></label>
+                    <input id="CustomRegex" type="text" is="emby-input"
+                           placeholder="^\(\d{4}\)\s+.+$">
+                    <div class="fieldDescription" data-i18n="customPatternHelp"></div>
+                </div>
+                <label class="emby-checkbox-label">
+                    <input id="RequireExactlyOneEligibleChild" type="checkbox" is="emby-checkbox">
+                    <span data-i18n="oneSeriesFolder"></span>
+                </label>
+
+                <h2 data-i18n="moviesHeading"></h2>
+                <label class="emby-checkbox-label">
+                    <input id="MoviesEnabled" type="checkbox" is="emby-checkbox">
+                    <span data-i18n="moviesEnabled"></span>
+                </label>
+                <label class="emby-checkbox-label">
+                    <input id="NestedMoviesEnabled" type="checkbox" is="emby-checkbox">
+                    <span data-i18n="nestedMoviesEnabled"></span>
+                </label>
+                <p class="fieldDescription" data-i18n="moviesHelp"></p>
+
+                <h2 data-i18n="loggingHeading"></h2>
+                <label class="emby-checkbox-label">
+                    <input id="EnableResolutionLogs" type="checkbox" is="emby-checkbox">
+                    <span data-i18n="logAccepted"></span>
+                </label>
+                <label class="emby-checkbox-label">
+                    <input id="EnableRejectionLogs" type="checkbox" is="emby-checkbox">
+                    <span data-i18n="logRejected"></span>
+                </label>
+
+                <p data-i18n="rescanHelp"></p>
+                <button is="emby-button" type="submit" class="raised button-submit block">
+                    <span data-i18n="save"></span>
+                </button>
+            </form>
+
+            <section class="smartResolverCard">
+                <h2 data-i18n="previewHeading"></h2>
+                <p class="fieldDescription" data-i18n="previewHelp"></p>
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="PreviewPath"
+                           data-i18n="folderPath"></label>
+                    <input id="PreviewPath" type="text" is="emby-input"
+                           placeholder="P:\Movies\(1979) Moonraker">
+                </div>
+                <div class="selectContainer">
+                    <label class="selectLabel" for="PreviewMediaType" data-i18n="contentType"></label>
+                    <select id="PreviewMediaType" is="emby-select">
+                        <option value="Auto" data-i18n="contentAuto"></option>
+                        <option value="Movies" data-i18n="moviesHeading"></option>
+                        <option value="Series" data-i18n="seriesShort"></option>
+                    </select>
+                </div>
+                <button id="PreviewButton" is="emby-button" type="button" class="raised block">
+                    <span data-i18n="checkFolder"></span>
+                </button>
+                <div id="PreviewResult" class="smartResolverResult smartResolverMuted"></div>
+            </section>
+
+            <section class="smartResolverCard">
+                <h2 data-i18n="historyHeading"></h2>
+                <p class="fieldDescription" data-i18n="historyHelp"></p>
+                <button id="RefreshHistoryButton" is="emby-button" type="button" class="raised">
+                    <span data-i18n="refresh"></span>
+                </button>
+                <button id="ClearHistoryButton" is="emby-button" type="button">
+                    <span data-i18n="clear"></span>
+                </button>
+                <div id="HistoryList" class="smartResolverHistory"></div>
+            </section>
+        </div>
+    </div>
+    <script type="text/javascript">
+        (function () {
+            const pluginId = '0a281de0-d3c8-43ef-bf2d-5fac17fbb8c6';
+            const page = document.querySelector('#SmartResolverConfigPage');
+            const form = document.querySelector('#SmartResolverConfigForm');
+            const interfaceLanguage =
+                document.documentElement.lang || navigator.language || '';
+            const isRussian = interfaceLanguage.toLowerCase().startsWith('ru');
+            const strings = {
+                en: {
+                    intro: 'Helps Jellyfin find a series inside an extra folder and read a movie title from its video filename. Media files are never changed.',
+                    enabled: 'Enable Smart Resolver',
+                    seriesHeading: 'Series inside extra folders',
+                    seriesShort: 'Series',
+                    seriesEnabled: 'Look for a series inside one additional folder level',
+                    seriesMode: 'How to recognize the outer folder',
+                    modeYear: 'Name starts with a year: (2025) Title',
+                    modeAny: 'Any name, when exactly one series is found inside',
+                    modePattern: 'Use my own folder-name pattern',
+                    customPattern: 'Folder-name pattern (regular expression)',
+                    customPatternHelp: 'Used only when “Use my own folder-name pattern” is selected.',
+                    oneSeriesFolder: 'Require exactly one suitable series folder inside',
+                    moviesHeading: 'Movies',
+                    moviesEnabled: 'Read the movie title and year from the video filename',
+                    nestedMoviesEnabled: 'Look for the movie inside one additional folder level',
+                    moviesHelp: 'Example: Moonraker (1979) [WEB-DL].mkv. The parent folder name is ignored.',
+                    loggingHeading: 'Diagnostics',
+                    logAccepted: 'Write successful matches to the Jellyfin log',
+                    logRejected: 'Write reasons for skipped folders to the debug log',
+                    rescanHelp: 'After changing recognition settings, scan the affected library again.',
+                    save: 'Save settings',
+                    previewHeading: 'Check a folder without rescanning',
+                    previewHelp: 'Enter a path visible to the Jellyfin server. The check is read-only.',
+                    folderPath: 'Folder path',
+                    contentType: 'What is stored there',
+                    contentAuto: 'Detect automatically',
+                    checkFolder: 'Check folder',
+                    historyHeading: 'Recent recognition decisions',
+                    historyHelp: 'The latest 200 accepted and skipped folders since the server started.',
+                    refresh: 'Refresh',
+                    clear: 'Clear history',
+                    emptyHistory: 'No decisions recorded yet.',
+                    accepted: 'Recognized',
+                    rejected: 'Skipped',
+                    moduleMovies: 'Movies',
+                    moduleSeries: 'Series',
+                    invalidRegex: 'The folder-name pattern is invalid.',
+                    requestFailed: 'The request failed. Check the Jellyfin server log.'
+                },
+                ru: {
+                    intro: 'Помогает Jellyfin найти сериал внутри дополнительной папки и взять название фильма из имени видеофайла. Медиафайлы никогда не изменяются.',
+                    enabled: 'Включить Smart Resolver',
+                    seriesHeading: 'Сериалы во вложенных папках',
+                    seriesShort: 'Сериалы',
+                    seriesEnabled: 'Искать сериал на один уровень глубже',
+                    seriesMode: 'Как определять внешнюю папку',
+                    modeYear: 'Название начинается с года: (2025) Название',
+                    modeAny: 'Любое название, если внутри найден ровно один сериал',
+                    modePattern: 'Использовать свой шаблон имени папки',
+                    customPattern: 'Шаблон имени папки (регулярное выражение)',
+                    customPatternHelp: 'Используется только при выборе собственного шаблона.',
+                    oneSeriesFolder: 'Требовать ровно одну подходящую папку сериала внутри',
+                    moviesHeading: 'Фильмы',
+                    moviesEnabled: 'Брать название и год фильма из имени видеофайла',
+                    nestedMoviesEnabled: 'Искать фильм на один уровень глубже',
+                    moviesHelp: 'Пример: Moonraker (1979) [WEB-DL].mkv. Название родительской папки не используется.',
+                    loggingHeading: 'Диагностика',
+                    logAccepted: 'Записывать успешные распознавания в журнал Jellyfin',
+                    logRejected: 'Записывать причины пропуска папок в отладочный журнал',
+                    rescanHelp: 'После изменения правил распознавания повторно просканируйте нужную медиатеку.',
+                    save: 'Сохранить настройки',
+                    previewHeading: 'Проверка папки без пересканирования',
+                    previewHelp: 'Укажите путь, доступный серверу Jellyfin. Проверка ничего не изменяет.',
+                    folderPath: 'Путь к папке',
+                    contentType: 'Что находится в папке',
+                    contentAuto: 'Определить автоматически',
+                    checkFolder: 'Проверить папку',
+                    historyHeading: 'Последние решения',
+                    historyHelp: 'Последние 200 распознанных и пропущенных папок с момента запуска сервера.',
+                    refresh: 'Обновить',
+                    clear: 'Очистить историю',
+                    emptyHistory: 'Решений пока нет.',
+                    accepted: 'Распознано',
+                    rejected: 'Пропущено',
+                    moduleMovies: 'Фильмы',
+                    moduleSeries: 'Сериалы',
+                    invalidRegex: 'Шаблон имени папки содержит ошибку.',
+                    requestFailed: 'Не удалось выполнить запрос. Проверьте журнал Jellyfin.'
+                }
+            };
+            const t = strings[isRussian ? 'ru' : 'en'];
+
+            function localize() {
+                page.querySelectorAll('[data-i18n]').forEach(function (element) {
+                    element.textContent = t[element.getAttribute('data-i18n')] || '';
+                });
+            }
+
+            function value(object, camel, pascal) {
+                return object[camel] !== undefined ? object[camel] : object[pascal];
+            }
+
+            function resolverMode(value) {
+                const values = {
+                    YearPrefix: '0',
+                    AnySingleNestedSeries: '1',
+                    CustomRegex: '2'
+                };
+                if (value === null || value === undefined || value === '') {
+                    return '0';
+                }
+
+                if (/^[0-2]$/.test(String(value))) {
+                    return String(value);
+                }
+
+                return values[value] || '0';
+            }
+
+            function moduleName(entry) {
+                const module = value(entry, 'module', 'Module');
+                return module === 'Movies' ? t.moduleMovies : t.moduleSeries;
+            }
+
+            function reasonText(entry) {
+                if (!isRussian) {
+                    return value(entry, 'reason', 'Reason');
+                }
+
+                const reasons = [
+                    'Папка распознана.',
+                    'Плагин выключен.',
+                    'Папка находится не в той медиатеке.',
+                    'Это уже папка сериала.',
+                    'Это уже папка сезона.',
+                    'Название внешней папки не подходит под выбранное правило.',
+                    'Внутри не найдена подходящая папка.',
+                    'Внутри найдено несколько подходящих папок.',
+                    'Во внутренней папке не найдены признаки сериала.',
+                    'В папке не найден основной видеофайл фильма.',
+                    'В папке обнаружены видеофайлы разных фильмов.',
+                    'Папка недоступна серверу Jellyfin.',
+                    'Обнаружена циклическая ссылка между папками.',
+                    'Внутренняя и внешняя папки совпадают.',
+                    'Собственный шаблон имени папки содержит ошибку.',
+                    'Папку не удалось распознать.'
+                ];
+                const code = value(entry, 'reasonCode', 'ReasonCode');
+                if (typeof code === 'number' && reasons[code]) {
+                    return reasons[code];
+                }
+
+                const names = [
+                    'Accepted', 'PluginDisabled', 'WrongCollectionType',
+                    'AlreadyInsideSeries', 'AlreadyInsideSeason',
+                    'OuterNameRejected', 'NoEligibleChild',
+                    'MultipleEligibleChildren', 'ChildHasNoSeriesEvidence',
+                    'ChildHasNoMovieEvidence', 'MultipleMovieFiles',
+                    'FilesystemUnavailable', 'PathLoopDetected',
+                    'InnerPathEqualsOuterPath', 'InvalidCustomRegex',
+                    'UnknownFailure'
+                ];
+                const index = names.indexOf(code);
+                return index >= 0 ? reasons[index] : value(entry, 'reason', 'Reason');
+            }
+
+            function apiRequest(path, options) {
+                return ApiClient.ajax(Object.assign({
+                    url: ApiClient.getUrl(path),
+                    dataType: 'json'
+                }, options || {}));
+            }
+
+            function renderHistory(entries) {
+                const list = page.querySelector('#HistoryList');
+                list.replaceChildren();
+                if (!entries || entries.length === 0) {
+                    list.textContent = t.emptyHistory;
+                    return;
+                }
+
+                entries.forEach(function (entry) {
+                    const accepted = Boolean(value(entry, 'accepted', 'Accepted'));
+                    const card = document.createElement('div');
+                    card.className = 'smartResolverHistoryItem ' + (accepted ? 'accepted' : 'rejected');
+                    const title = document.createElement('strong');
+                    title.textContent = (accepted ? t.accepted : t.rejected) +
+                        ' · ' + moduleName(entry);
+                    const path = document.createElement('div');
+                    path.textContent = value(entry, 'sourcePath', 'SourcePath');
+                    const reason = document.createElement('div');
+                    reason.className = 'smartResolverMuted';
+                    reason.textContent = reasonText(entry);
+                    card.append(title, path, reason);
+                    list.appendChild(card);
+                });
+            }
+
+            function loadHistory() {
+                return apiRequest('SmartResolver/History', { type: 'GET' })
+                    .then(renderHistory)
+                    .catch(function () {
+                        page.querySelector('#HistoryList').textContent = t.requestFailed;
+                    });
+            }
+
+            page.addEventListener('pageshow', function () {
+                localize();
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                    page.querySelector('#Enabled').checked = config.ResolverEnabled;
+                    page.querySelector('#NestedSeriesEnabled').checked = config.NestedSeriesEnabled;
+                    page.querySelector('#NestedSeriesMode').value =
+                        resolverMode(config.NestedSeriesMode);
+                    page.querySelector('#CustomRegex').value = config.CustomRegex || '';
+                    page.querySelector('#RequireExactlyOneEligibleChild').checked =
+                        config.RequireExactlyOneEligibleChild;
+                    page.querySelector('#MoviesEnabled').checked = config.MoviesEnabled;
+                    page.querySelector('#NestedMoviesEnabled').checked =
+                        config.NestedMoviesEnabled !== false;
+                    page.querySelector('#EnableResolutionLogs').checked = config.EnableResolutionLogs;
+                    page.querySelector('#EnableRejectionLogs').checked = config.EnableRejectionLogs;
+                    Dashboard.hideLoadingMsg();
+                });
+                loadHistory();
+            });
+
+            form.addEventListener('submit', function (event) {
+                event.preventDefault();
+                const mode = parseInt(page.querySelector('#NestedSeriesMode').value, 10);
+                const customRegex = page.querySelector('#CustomRegex').value;
+                if (mode === 2) {
+                    try {
+                        new RegExp(customRegex);
+                    } catch (error) {
+                        Dashboard.alert(t.invalidRegex);
+                        return false;
+                    }
+                }
+
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                    config.ResolverEnabled = page.querySelector('#Enabled').checked;
+                    config.NestedSeriesEnabled = page.querySelector('#NestedSeriesEnabled').checked;
+                    config.NestedSeriesMode = mode;
+                    config.CustomRegex = customRegex;
+                    config.RequireExactlyOneEligibleChild =
+                        page.querySelector('#RequireExactlyOneEligibleChild').checked;
+                    config.MoviesEnabled = page.querySelector('#MoviesEnabled').checked;
+                    config.NestedMoviesEnabled =
+                        page.querySelector('#NestedMoviesEnabled').checked;
+                    config.EnableResolutionLogs = page.querySelector('#EnableResolutionLogs').checked;
+                    config.EnableRejectionLogs = page.querySelector('#EnableRejectionLogs').checked;
+                    return ApiClient.updatePluginConfiguration(pluginId, config);
+                }).then(Dashboard.processPluginConfigurationUpdateResult);
+                return false;
+            });
+
+            page.querySelector('#PreviewButton').addEventListener('click', function () {
+                const result = page.querySelector('#PreviewResult');
+                result.textContent = '';
+                Dashboard.showLoadingMsg();
+                apiRequest('SmartResolver/Preview', {
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        Path: page.querySelector('#PreviewPath').value,
+                        MediaType: page.querySelector('#PreviewMediaType').value
+                    })
+                }).then(function (entries) {
+                    result.textContent = entries.map(function (entry) {
+                        const accepted = Boolean(value(entry, 'accepted', 'Accepted'));
+                        const name = value(entry, 'detectedName', 'DetectedName');
+                        const year = value(entry, 'detectedYear', 'DetectedYear');
+                        const resolved = value(entry, 'resolvedPath', 'ResolvedPath');
+                        return [
+                            (accepted ? t.accepted : t.rejected) + ' · ' +
+                                moduleName(entry),
+                            name ? name + (year ? ' (' + year + ')' : '') : null,
+                            resolved || null,
+                            reasonText(entry)
+                        ].filter(Boolean).join('\n');
+                    }).join('\n\n');
+                }).catch(function () {
+                    result.textContent = t.requestFailed;
+                }).finally(Dashboard.hideLoadingMsg);
+            });
+
+            page.querySelector('#RefreshHistoryButton').addEventListener('click', loadHistory);
+            page.querySelector('#ClearHistoryButton').addEventListener('click', function () {
+                apiRequest('SmartResolver/History', { type: 'DELETE' }).then(loadHistory);
+            });
+        }());
+    </script>
+</div>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html><head><title>Cowabunga Jellyfin Companion</title></head><body>
+<div id="CowabungaCompanionPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox,emby-select">
+  <div data-role="content"><div class="content-primary">
+    <style>
+      #CowabungaCompanionPage .companionBrand {display:flex;align-items:center;gap:28px;padding:24px;margin-bottom:24px;border-radius:18px;background:linear-gradient(115deg,#211433,#131e27);color:#fff;border:1px solid #654096}
+      #CowabungaCompanionPage .companionBrand img {width:156px;height:156px;flex:none;object-fit:contain;border-radius:14px}
+      #CowabungaCompanionPage .companionBrand h1 {margin:0 0 12px;font-size:clamp(1.5rem,3vw,2.3rem);line-height:1.2}
+      #CowabungaCompanionPage .companionBrand p {margin:0;color:#ddd4e8;line-height:1.6;max-width:640px}
+      #CowabungaCompanionPage nav a {padding:12px 16px;border-radius:10px;background:#211c2d;color:#eee5ff;border-bottom:3px solid #13b6ee;text-decoration:none}
+      #CowabungaCompanionPage nav a:nth-child(2) {border-color:#bb74ed}
+      #CowabungaCompanionPage nav a:nth-child(3) {border-color:#ff920a}
+      #CowabungaCompanionPage nav a:hover {background:#39254e}
+      #CowabungaCompanionPage nav a:focus-visible {outline:3px solid #c3df38;outline-offset:4px}
+      #CowabungaCompanionPage h2 {border-left:3px solid #9cbf21;padding-left:12px}
+      #CowabungaCompanionPage #CompanionLibraries input {accent-color:#8754da;width:20px;height:20px}
+      @media(max-width:600px) {#CowabungaCompanionPage .companionBrand {align-items:flex-start;flex-direction:column;gap:18px;padding:20px} #CowabungaCompanionPage .companionBrand img {width:104px;height:104px}}
+    </style>
+    <header class="companionBrand">
+      <img id="CompanionLogo" alt="" width="156" height="156" hidden>
+      <div><h1>Cowabunga Jellyfin Companion</h1>
+      <p>Распознавание медиа, метаданные и кастомные изображения — с отдельными настройками для каждой медиатеки.</p></div>
+    </header>
+    <nav style="display:flex;flex-wrap:wrap;gap:1.5em;margin:1.5em 0" aria-label="Настройки модулей">
+      <a is="emby-link" href="#/configurationpage?name=CowabungaResolver">Smart Resolver →</a>
+      <a is="emby-link" href="#/configurationpage?name=CowabungaMetadata">Choose your Meta →</a>
+      <a is="emby-link" href="#/configurationpage?name=CowabungaArtwork">Custom Artwork →</a>
+    </nav>
+    <p id="CompanionStatus" role="status" aria-live="polite"></p>
+    <p id="CompanionError" role="alert" style="color:var(--error-color,#ff6b6b)"></p>
+    <form id="CompanionForm">
+      <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" id="CompanionEnabled"><span>Включить Cowabunga Jellyfin Companion</span></label></div>
+      <h2>Модули</h2>
+      <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" id="ResolverEnabled"><span>Smart Resolver — распознавание фильмов и вложенных сериалов</span></label></div>
+      <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" id="MetadataEnabled"><span>Choose your Meta — локализация метаданных</span></label></div>
+      <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" id="MetadataImagesEnabled"><span>Языковой подбор постеров и логотипов в Choose your Meta</span></label></div>
+      <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" id="ArtworkEnabled"><span>Custom Artwork — изображения из облака Cowabunga</span></label></div>
+      <h2>Медиатеки</h2>
+      <p class="fieldDescription">Отметьте, какие модули работают в каждой медиатеке. Глобально выключенный модуль не запускается независимо от этих отметок.</p>
+      <div id="CompanionLibraries" style="overflow-x:auto"></div>
+      <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" id="AllLibraries"><span>Автоматически включать модули для новых медиатек</span></label></div>
+      <h2>Коллекции</h2>
+      <p class="fieldDescription">Коллекции могут объединять фильмы из разных медиатек. Эти настройки применяются ко всем коллекциям отдельно от таблицы выше.</p>
+      <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" id="CollectionMetadataEnabled"><span>Метаданные и языковой подбор изображений коллекций</span></label></div>
+      <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" id="CollectionArtworkEnabled"><span>Кастомные изображения коллекций</span></label></div>
+      <h2>Существующие изображения</h2>
+      <p class="fieldDescription">По умолчанию фоновые обновления заменяют только изображения, сохранённые Companion, если они не были изменены вручную. Отключение модуля сохраняет текущие метаданные и изображения.</p>
+      <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" id="ReplaceExistingImages"><span>Разрешить фоновую замену других сохранённых изображений</span></label></div>
+      <p class="fieldDescription">Замена файлов рядом с видео отдельно разрешается в настройках Custom Artwork.</p>
+      <button is="emby-button" type="submit" class="raised button-submit block"><span>Сохранить настройки</span></button>
+    </form>
+    <h2>Переход с трёх плагинов</h2>
+    <p class="fieldDescription">Импорт переносит настройки модулей и доступный учёт локальных файлов. Выбор медиатек остаётся прежним. После импорта удалите старые плагины через Jellyfin и перезапустите сервер.</p>
+    <button is="emby-button" type="button" id="ImportLegacy" class="raised"><span>Импортировать прежние настройки</span></button>
+  </div></div>
+  <script>
+  (function () {
+    'use strict';
+    const page = document.querySelector('#CowabungaCompanionPage');
+    const pluginId = '0a281de0-d3c8-43ef-bf2d-5fac17fbb8c6';
+    const fields = ['ResolverEnabled','MetadataEnabled','MetadataImagesEnabled','ArtworkEnabled','AllLibraries','CollectionMetadataEnabled','CollectionArtworkEnabled','ReplaceExistingImages'];
+    let rows = [];
+    function error(value) { page.querySelector('#CompanionError').textContent = value; }
+    function request(path, method) { return ApiClient.ajax({type:method || 'GET', url:ApiClient.getUrl('CowabungaCompanion/' + path), dataType:'json'}); }
+    function renderLibraries(libraries, config) {
+      const host = page.querySelector('#CompanionLibraries'); host.replaceChildren(); rows = [];
+      const table = document.createElement('table'); table.style.cssText = 'border-collapse:collapse;width:100%;margin:1em 0';
+      const head = document.createElement('tr');
+      ['Медиатека','Распознавание','Метаданные','Обложки'].forEach(function (title) { const th = document.createElement('th'); th.textContent = title; th.style.cssText = 'padding:12px;text-align:left'; head.appendChild(th); });
+      const thead = document.createElement('thead'); thead.appendChild(head); table.appendChild(thead);
+      const body = document.createElement('tbody');
+      libraries.filter(function (library) { return ['movies','tvshows','mixed'].includes(library.Type); }).forEach(function (library) {
+        const rule = (config.Libraries || []).find(function (entry) { return entry.LibraryId.replace(/-/g,'').toLowerCase() === library.Id.replace(/-/g,'').toLowerCase(); });
+        const tr = document.createElement('tr'); const label = document.createElement('td'); label.textContent = library.Name; label.style.cssText = 'padding:12px;overflow-wrap:anywhere'; tr.appendChild(label);
+        const row = { LibraryId: library.Id, controls: {} };
+        ['Resolver','Metadata','Artwork'].forEach(function (module) {
+          const td = document.createElement('td'); td.style.padding = '12px';
+          const check = document.createElement('input'); check.type = 'checkbox'; check.setAttribute('aria-label',library.Name + ': ' + module);
+          check.checked = rule ? rule[module] === true : config.AllLibraries === true;
+          td.appendChild(check); tr.appendChild(td); row.controls[module] = check;
+        }); body.appendChild(tr); rows.push(row);
+      }); table.appendChild(body); host.appendChild(table);
+      if (!rows.length) { const p = document.createElement('p'); p.textContent = 'Сначала добавьте медиатеки фильмов или сериалов в Jellyfin.'; host.appendChild(p); }
+    }
+    async function load() {
+      error('');
+      try {
+        const results = await Promise.all([ApiClient.getPluginConfiguration(pluginId),request('Status')]);
+        const config = results[0], status = results[1];
+        const logo = page.querySelector('#CompanionLogo');
+        logo.onerror = function () { logo.hidden = true; };
+        logo.onload = function () { logo.hidden = false; };
+        logo.src = ApiClient.getUrl('Plugins/' + pluginId + '/' + encodeURIComponent(status.Version) + '/Image');
+        page.querySelector('#CompanionEnabled').checked = config.Enabled === true;
+        fields.forEach(function (field) { page.querySelector('#'+field).checked = config[field] === true; });
+        renderLibraries(status.Libraries || [], config);
+        page.querySelector('#CompanionStatus').textContent = 'Версия ' + status.Version + '. Изображений в очереди: ' + status.PendingImages + '.';
+        page.querySelector('#ImportLegacy').disabled = !(status.LegacyConfigurations || []).length;
+        if ((status.ActiveLegacyPlugins || []).length) error('Загружены прежние плагины: ' + status.ActiveLegacyPlugins.join(', ') + '. Соответствующие модули Companion приостановлены до их удаления и перезапуска Jellyfin.');
+      } catch (_) { error('Не удалось загрузить настройки. Проверьте подключение и права администратора.'); }
+    }
+    page.addEventListener('pageshow',load);
+    page.querySelector('#CompanionForm').addEventListener('submit',async function (event) {
+      event.preventDefault(); Dashboard.showLoadingMsg(); error('');
+      try {
+        const config = await ApiClient.getPluginConfiguration(pluginId);
+        config.Enabled = page.querySelector('#CompanionEnabled').checked;
+        fields.forEach(function (field) { config[field] = page.querySelector('#'+field).checked; });
+        const ids = new Set(rows.map(function (row) { return row.LibraryId.replace(/-/g,'').toLowerCase(); }));
+        config.Libraries = (config.Libraries || []).filter(function (rule) { return !ids.has(rule.LibraryId.replace(/-/g,'').toLowerCase()); }).concat(rows.map(function (row) {
+          return {LibraryId:row.LibraryId,Resolver:row.controls.Resolver.checked,Metadata:row.controls.Metadata.checked,Artwork:row.controls.Artwork.checked};
+        }));
+        const result = await ApiClient.updatePluginConfiguration(pluginId,config);
+        Dashboard.processPluginConfigurationUpdateResult(result); await load();
+      } catch (_) { error('Не удалось сохранить настройки.'); }
+      finally { Dashboard.hideLoadingMsg(); }
+    });
+    page.querySelector('#ImportLegacy').addEventListener('click',async function () {
+      Dashboard.showLoadingMsg(); error('');
+      try { const result = await request('ImportLegacy','POST'); await load(); page.querySelector('#CompanionStatus').textContent = 'Импортировано конфигураций: ' + result.Imported.length + '. Выберите медиатеки и сохраните настройки.'; }
+      catch (_) { error('Импорт не выполнен. Проверьте файлы конфигурации и журнал Jellyfin.'); }
+      finally { Dashboard.hideLoadingMsg(); }
+    });
+  })();
+  </script>
+</div></body></html>

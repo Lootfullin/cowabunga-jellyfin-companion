@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <title>Cowabunga Custom Artwork</title>
+</head>
+<body>
+<div id="CustomArtworkConfigPage" data-role="page" class="page type-interior pluginConfigurationPage">
+    <div data-role="content">
+        <div class="content-primary">
+            <p><a is="emby-link" href="#/configurationpage?name=CowabungaCompanion">← Cowabunga Jellyfin Companion</a></p>
+            <h1>Custom Artwork</h1>
+            <form id="CustomArtworkConfigForm">
+                <div class="inputContainer">
+                    <label class="inputLabel inputLabelUnfocused" for="RefreshIntervalMinutes">
+                        Проверять изменения, минут
+                    </label>
+                    <input is="emby-input" type="number" id="RefreshIntervalMinutes"
+                           name="RefreshIntervalMinutes" min="1" max="1440" />
+                    <div class="fieldDescription">
+                        Скачивается только файл ревизии размером в несколько десятков байт.
+                        Полный индекс загружается лишь после изменения ревизии.
+                    </div>
+                </div>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input is="emby-checkbox" type="checkbox" id="Posters" />
+                        <span>Подставлять постеры</span>
+                    </label>
+                </div>
+
+                <div class="selectContainer">
+                    <label class="selectLabel" for="StorageMode">Где хранить загруженные изображения</label>
+                    <select is="emby-select" id="StorageMode" name="StorageMode" class="emby-select-withcolor emby-select">
+                        <option value="Jellyfin">Хранить в медиатеке Jellyfin</option>
+                        <option value="MediaFolder">Хранить в папке с видеофайлом</option>
+                    </select>
+                    <div class="fieldDescription">
+                        Во втором режиме Jellyfin должен иметь право записи в папки медиатеки.
+                        По умолчанию существующие постеры и логотипы, созданные не этим плагином,
+                        не перезаписываются.
+                        Для коллекций всегда используется внутреннее хранилище Jellyfin.
+                    </div>
+                </div>
+
+                <div id="OverwriteExistingMediaFilesContainer"
+                     class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input is="emby-checkbox" type="checkbox" id="OverwriteExistingMediaFiles" />
+                        <span>Заменять существующие локальные постеры и логотипы</span>
+                    </label>
+                    <div class="fieldDescription">
+                        Разрешает плагину заменять используемые Jellyfin файлы poster, folder, cover,
+                        default, clearlogo и logo в папках медиатеки, даже если они были созданы не этим
+                        плагином. Без галочки такие файлы сохраняются.
+                    </div>
+                </div>
+
+                <div class="checkboxContainer checkboxContainer-withDescription">
+                    <label class="emby-checkbox-label">
+                        <input is="emby-checkbox" type="checkbox" id="Logos" />
+                        <span>Подставлять логотипы</span>
+                    </label>
+                </div>
+
+                <div class="verticalSection">
+                    <h3 class="sectionTitle">Состояние индекса</h3>
+                    <div id="IndexState" class="fieldDescription"></div>
+                    <div id="IndexError" class="fieldDescription" style="color: var(--error-color, #ff6b6b);"></div>
+                </div>
+
+                <button is="emby-button" type="submit" class="raised button-submit block">
+                    <span>Сохранить и проверить</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        (function () {
+            var pluginId = '0a281de0-d3c8-43ef-bf2d-5fac17fbb8c6';
+            var page = document.querySelector('#CustomArtworkConfigPage');
+
+            function updateOverwriteVisibility() {
+                var mediaFolderSelected = page.querySelector('#StorageMode').value === 'MediaFolder';
+                page.querySelector('#OverwriteExistingMediaFilesContainer').style.display =
+                    mediaFolderSelected ? '' : 'none';
+            }
+
+            function load(config) {
+                page.querySelector('#RefreshIntervalMinutes').value = config.RefreshIntervalMinutes || 5;
+                page.querySelector('#Posters').checked = config.Posters !== false;
+                page.querySelector('#Logos').checked = config.Logos !== false;
+                page.querySelector('#StorageMode').value = config.StorageMode || 'Jellyfin';
+                page.querySelector('#OverwriteExistingMediaFiles').checked =
+                    config.OverwriteExistingMediaFiles === true;
+                updateOverwriteVisibility();
+
+                var revision = config.LastRevision ? config.LastRevision.substring(0, 12) : 'нет';
+                page.querySelector('#IndexState').textContent = config.LastIndexedUtc
+                    ? 'Последняя проверка: ' + config.LastIndexedUtc
+                        + '. Сопоставлено позиций: ' + config.LastIndexedCount
+                        + '. Ревизия: ' + revision + '.'
+                    : 'Индекс ещё не загружен.';
+                page.querySelector('#IndexError').textContent = config.LastError
+                    ? 'Последняя ошибка: ' + config.LastError
+                    : '';
+            }
+
+            function fill() {
+                ApiClient.getPluginConfiguration(pluginId).then(load);
+            }
+
+            function startRefresh() {
+                if (!ApiClient.getScheduledTasks) {
+                    return;
+                }
+
+                ApiClient.getScheduledTasks().then(function (tasks) {
+                    var task = (tasks || []).filter(function (entry) {
+                        return entry.Key === 'CustomArtworkRefreshIndex';
+                    })[0];
+                    if (task && task.State === 'Idle') {
+                        ApiClient.startScheduledTask(task.Id);
+                    }
+                });
+            }
+
+            page.addEventListener('pageshow', fill);
+            if (window.ApiClient) {
+                fill();
+            }
+
+            page.querySelector('#StorageMode').addEventListener('change', updateOverwriteVisibility);
+
+            page.querySelector('#CustomArtworkConfigForm').addEventListener('submit', function (event) {
+                event.preventDefault();
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                    config.RefreshIntervalMinutes =
+                        parseInt(page.querySelector('#RefreshIntervalMinutes').value, 10) || 5;
+                    config.Posters = page.querySelector('#Posters').checked;
+                    config.Logos = page.querySelector('#Logos').checked;
+                    config.StorageMode = page.querySelector('#StorageMode').value;
+                    config.OverwriteExistingMediaFiles =
+                        page.querySelector('#OverwriteExistingMediaFiles').checked;
+                    config.LastError = '';
+
+                    ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                        startRefresh();
+                    });
+                });
+                return false;
+            });
+        })();
+    </script>
+</div>
+</body>
+</html>

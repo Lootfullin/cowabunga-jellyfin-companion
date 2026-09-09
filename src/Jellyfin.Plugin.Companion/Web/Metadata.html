@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Choose your Meta!</title>
+</head>
+<body>
+    <div id="configPage" data-role="page" class="page type-interior pluginConfigurationPage configPage" data-require="emby-input,emby-button,emby-checkbox,emby-select">
+        <div data-role="content">
+            <div class="content-primary">
+                <p><a is="emby-link" href="#/configurationpage?name=CowabungaCompanion">← Cowabunga Jellyfin Companion</a></p>
+                <h2>Choose your Meta!</h2>
+                <p>Выбирайте язык текстовых метаданных и изображений отдельно для российских и зарубежных фильмов.</p>
+
+                <form class="configForm">
+                    <h3>TMDB</h3>
+                    <p>Используется API-ключ встроенного загрузчика TheMovieDB в Jellyfin. Отдельно регистрироваться на TMDB не нужно.</p>
+                    <label for="TmdbApiKey">Собственный TMDB API Key (необязательно):</label>
+                    <input id="TmdbApiKey" name="TmdbApiKey" type="text" is="emby-input" />
+                    <div class="fieldDescription">
+                        Оставьте поле пустым, чтобы использовать ключ из установленной версии Jellyfin.
+                        Собственный ключ нужен только как резерв при изменении внутренней интеграции Jellyfin.
+                    </div>
+                    <div id="TmdbIntegrationStatus" class="fieldDescription"></div>
+
+                    <h3>Proxy (для TMDB и Fanart.tv)</h3>
+                    <label for="ProxyUrl">Proxy URL:</label>
+                    <input id="ProxyUrl" name="ProxyUrl" type="text" is="emby-input" placeholder="http://host:port" />
+                    <div class="fieldDescription">Например: http://proxy.example.com:3128</div>
+
+                    <label for="ProxyUsername">Proxy Username:</label>
+                    <input id="ProxyUsername" name="ProxyUsername" type="text" is="emby-input" />
+
+                    <label for="ProxyPassword">Proxy Password:</label>
+                    <input id="ProxyPassword" name="ProxyPassword" type="password" is="emby-input" />
+
+                    <h3>Текстовые метаданные</h3>
+                    <label class="checkboxContainer">
+                        <input id="EnableRussianTitles" name="EnableRussianTitles" type="checkbox" is="emby-checkbox" checked />
+                        <span>Заменять названия на русские</span>
+                    </label>
+
+                    <br/>
+                    <label class="checkboxContainer">
+                        <input id="EnableRussianOverviews" name="EnableRussianOverviews" type="checkbox" is="emby-checkbox" checked />
+                        <span>Заменять описания на русские</span>
+                    </label>
+
+                    <br/>
+                    <label class="checkboxContainer">
+                        <input id="EnableRussianTaglines" name="EnableRussianTaglines" type="checkbox" is="emby-checkbox" checked />
+                        <span>Заменять слоганы на русские, когда перевод существует</span>
+                    </label>
+
+                    <br/>
+                    <label class="checkboxContainer">
+                        <input id="EnableRussianGenres" name="EnableRussianGenres" type="checkbox" is="emby-checkbox" checked />
+                        <span>Заменять жанры на русские</span>
+                    </label>
+
+                    <br/>
+                    <label class="checkboxContainer">
+                        <input id="EnableRussianStudios" name="EnableRussianStudios" type="checkbox" is="emby-checkbox" checked />
+                        <span>Использовать русские названия студий, когда они существуют</span>
+                    </label>
+
+                    <br/>
+                    <label class="checkboxContainer">
+                        <input id="EnableRussianPeople" name="EnableRussianPeople" type="checkbox" is="emby-checkbox" checked />
+                        <span>Использовать русские имена актёров и съёмочной группы, когда они существуют</span>
+                    </label>
+
+                    <h3>Изображения фильмов</h3>
+                    <h4>Зарубежные фильмы</h4>
+                    <label for="ForeignMoviePosterPreference">Постеры:</label>
+                    <select id="ForeignMoviePosterPreference" name="ForeignMoviePosterPreference" is="emby-select">
+                        <option value="1">Сначала английские, затем русские (EN → RU)</option>
+                        <option value="0">Сначала русские, затем английские (RU → EN)</option>
+                        <option value="2">Не загружать этим плагином</option>
+                    </select>
+
+                    <br/>
+                    <label for="ForeignMovieLogoPreference">Логотипы:</label>
+                    <select id="ForeignMovieLogoPreference" name="ForeignMovieLogoPreference" is="emby-select">
+                        <option value="1">Сначала английские, затем русские (EN → RU)</option>
+                        <option value="0">Сначала русские, затем английские (RU → EN)</option>
+                        <option value="2">Не загружать этим плагином</option>
+                    </select>
+
+                    <h4>Российские фильмы</h4>
+                    <label for="RussianMoviePosterPreference">Постеры:</label>
+                    <select id="RussianMoviePosterPreference" name="RussianMoviePosterPreference" is="emby-select">
+                        <option value="0">Сначала русские, затем английские (RU → EN)</option>
+                        <option value="1">Сначала английские, затем русские (EN → RU)</option>
+                        <option value="2">Не загружать этим плагином</option>
+                    </select>
+
+                    <br/>
+                    <label for="RussianMovieLogoPreference">Логотипы:</label>
+                    <select id="RussianMovieLogoPreference" name="RussianMovieLogoPreference" is="emby-select">
+                        <option value="0">Сначала русские, затем английские (RU → EN)</option>
+                        <option value="1">Сначала английские, затем русские (EN → RU)</option>
+                        <option value="2">Не загружать этим плагином</option>
+                    </select>
+
+                    <h4>Коллекции</h4>
+                    <label for="CollectionPosterPreference">Постеры:</label>
+                    <select id="CollectionPosterPreference" name="CollectionPosterPreference" is="emby-select">
+                        <option value="1">Сначала английские, затем русские (EN → RU)</option>
+                        <option value="0">Сначала русские, затем английские (RU → EN)</option>
+                        <option value="2">Не загружать этим плагином</option>
+                    </select>
+
+                    <br/>
+                    <label for="CollectionLogoPreference">Логотипы:</label>
+                    <select id="CollectionLogoPreference" name="CollectionLogoPreference" is="emby-select">
+                        <option value="1">Сначала английские, затем русские (EN → RU)</option>
+                        <option value="0">Сначала русские, затем английские (RU → EN)</option>
+                        <option value="2">Не загружать этим плагином</option>
+                    </select>
+                    <div class="fieldDescription">
+                        Постеры коллекций загружаются из TMDB, логотипы — через официальный плагин Fanart.
+                    </div>
+                    <div id="FanartIntegrationStatus" class="fieldDescription"></div>
+
+                    <div class="fieldDescription">
+                        Российский фильм определяется по стране производства RU;
+                        если страна не заполнена — по исходному языку ru.
+                        В каждой паре второй язык используется как резерв.
+                        Для каждого поля английское значение сохраняется, если русский вариант не найден.
+                        Локальные изображения имеют приоритет, фоны плагин не изменяет.
+                        Чтобы заменить уже сохранённые картинки,
+                        обновите фильм с включённой заменой изображений.
+                    </div>
+
+                    <h3>Автоматическая настройка библиотек</h3>
+                    <p>
+                        Включает Choose your Meta! и Cowabunga Custom Artwork для поддерживаемых
+                        фильмов, сериалов, сезонов и коллекций. Порядок изображений:
+                        Custom Artwork → Choose your Meta! → TheMovieDB. Остальные загрузчики сохраняются.
+                    </p>
+                    <button id="ConfigureLibraries" is="emby-button" type="button" class="raised block">
+                        <span>Настроить библиотеки автоматически</span>
+                    </button>
+                    <div id="ConfigureLibrariesResult" class="fieldDescription"></div>
+
+                    <br/>
+                    <button is="emby-button" type="submit" class="raised button-submit block">
+                        <span>Save</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            var PluginConfig = {
+                pluginId: "0a281de0-d3c8-43ef-bf2d-5fac17fbb8c6"
+            };
+            var loadedArtworkPreferences = null;
+
+            function artworkPreference(value, fallback) {
+                var values = {
+                    RussianFirst: '0',
+                    EnglishFirst: '1',
+                    Disabled: '2'
+                };
+                if (value === null || value === undefined || value === '') {
+                    return fallback;
+                }
+
+                if (/^[0-2]$/.test(String(value))) {
+                    return String(value);
+                }
+
+                return values[value] || fallback;
+            }
+
+            function currentArtworkPreferences() {
+                return {
+                    foreignPoster: document.getElementById('ForeignMoviePosterPreference').value,
+                    foreignLogo: document.getElementById('ForeignMovieLogoPreference').value,
+                    russianPoster: document.getElementById('RussianMoviePosterPreference').value,
+                    russianLogo: document.getElementById('RussianMovieLogoPreference').value,
+                    collectionPoster: document.getElementById('CollectionPosterPreference').value,
+                    collectionLogo: document.getElementById('CollectionLogoPreference').value
+                };
+            }
+
+            document.querySelector('.configPage')
+                .addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(PluginConfig.pluginId).then(function (config) {
+                        document.getElementById('TmdbApiKey').value = config.TmdbApiKey || '';
+                        document.getElementById('ProxyUrl').value = config.ProxyUrl || '';
+                        document.getElementById('ProxyUsername').value = config.ProxyUsername || '';
+                        document.getElementById('ProxyPassword').value = config.ProxyPassword || '';
+                        document.getElementById('EnableRussianTitles').checked = config.EnableRussianTitles !== false;
+                        document.getElementById('EnableRussianOverviews').checked = config.EnableRussianOverviews !== false;
+                        document.getElementById('EnableRussianTaglines').checked = config.EnableRussianTaglines !== false;
+                        document.getElementById('EnableRussianGenres').checked = config.EnableRussianGenres !== false;
+                        document.getElementById('EnableRussianStudios').checked = config.EnableRussianStudios !== false;
+                        document.getElementById('EnableRussianPeople').checked = config.EnableRussianPeople !== false;
+                        document.getElementById('ForeignMoviePosterPreference').value = artworkPreference(config.ForeignMoviePosterPreference, '1');
+                        document.getElementById('ForeignMovieLogoPreference').value = artworkPreference(config.ForeignMovieLogoPreference, '1');
+                        document.getElementById('RussianMoviePosterPreference').value = artworkPreference(config.RussianMoviePosterPreference, '0');
+                        document.getElementById('RussianMovieLogoPreference').value = artworkPreference(config.RussianMovieLogoPreference, '0');
+                        document.getElementById('CollectionPosterPreference').value = artworkPreference(config.CollectionPosterPreference, '1');
+                        document.getElementById('CollectionLogoPreference').value = artworkPreference(config.CollectionLogoPreference, '1');
+                        loadedArtworkPreferences = currentArtworkPreferences();
+                        ApiClient.ajax({
+                            url: ApiClient.getUrl('ChooseYourMeta/Status'),
+                            type: 'GET',
+                            dataType: 'json'
+                        }).then(function (status) {
+                            var available = status.jellyfinTmdbAvailable === true || status.JellyfinTmdbAvailable === true;
+                            document.getElementById('TmdbIntegrationStatus').textContent = available
+                                ? 'Встроенная интеграция TMDB найдена.'
+                                : 'Встроенная интеграция TMDB не найдена. Укажите собственный ключ.';
+                            var fanartAvailable = status.jellyfinFanartAvailable === true || status.JellyfinFanartAvailable === true;
+                            document.getElementById('FanartIntegrationStatus').textContent = fanartAvailable
+                                ? 'Официальный плагин Fanart найден — логотипы коллекций доступны.'
+                                : 'Плагин Fanart не найден. Установите его из каталога Jellyfin для логотипов коллекций.';
+                        }).catch(function () {
+                            document.getElementById('TmdbIntegrationStatus').textContent =
+                                'Не удалось проверить встроенную интеграцию TMDB.';
+                            document.getElementById('FanartIntegrationStatus').textContent =
+                                'Не удалось проверить плагин Fanart.';
+                        });
+                        Dashboard.hideLoadingMsg();
+                    });
+                });
+
+            document.querySelector('.configForm')
+                .addEventListener('submit', function (e) {
+                    Dashboard.showLoadingMsg();
+
+                    var selectedArtworkPreferences = currentArtworkPreferences();
+                    var refreshRequest = {
+                        MoviePosters: loadedArtworkPreferences !== null
+                            && (loadedArtworkPreferences.foreignPoster !== selectedArtworkPreferences.foreignPoster
+                                || loadedArtworkPreferences.russianPoster !== selectedArtworkPreferences.russianPoster),
+                        MovieLogos: loadedArtworkPreferences !== null
+                            && (loadedArtworkPreferences.foreignLogo !== selectedArtworkPreferences.foreignLogo
+                                || loadedArtworkPreferences.russianLogo !== selectedArtworkPreferences.russianLogo),
+                        CollectionPosters: loadedArtworkPreferences !== null
+                            && loadedArtworkPreferences.collectionPoster !== selectedArtworkPreferences.collectionPoster,
+                        CollectionLogos: loadedArtworkPreferences !== null
+                            && loadedArtworkPreferences.collectionLogo !== selectedArtworkPreferences.collectionLogo
+                    };
+
+                    ApiClient.getPluginConfiguration(PluginConfig.pluginId).then(function (config) {
+                        config.TmdbApiKey = document.getElementById('TmdbApiKey').value;
+                        config.ProxyUrl = document.getElementById('ProxyUrl').value;
+                        config.ProxyUsername = document.getElementById('ProxyUsername').value;
+                        config.ProxyPassword = document.getElementById('ProxyPassword').value;
+                        config.EnableRussianTitles = document.getElementById('EnableRussianTitles').checked;
+                        config.EnableRussianOverviews = document.getElementById('EnableRussianOverviews').checked;
+                        config.EnableRussianTaglines = document.getElementById('EnableRussianTaglines').checked;
+                        config.EnableRussianGenres = document.getElementById('EnableRussianGenres').checked;
+                        config.EnableRussianStudios = document.getElementById('EnableRussianStudios').checked;
+                        config.EnableRussianPeople = document.getElementById('EnableRussianPeople').checked;
+                        config.ForeignMoviePosterPreference = parseInt(document.getElementById('ForeignMoviePosterPreference').value, 10);
+                        config.ForeignMovieLogoPreference = parseInt(document.getElementById('ForeignMovieLogoPreference').value, 10);
+                        config.RussianMoviePosterPreference = parseInt(document.getElementById('RussianMoviePosterPreference').value, 10);
+                        config.RussianMovieLogoPreference = parseInt(document.getElementById('RussianMovieLogoPreference').value, 10);
+                        config.CollectionPosterPreference = parseInt(document.getElementById('CollectionPosterPreference').value, 10);
+                        config.CollectionLogoPreference = parseInt(document.getElementById('CollectionLogoPreference').value, 10);
+
+                        ApiClient.updatePluginConfiguration(PluginConfig.pluginId, config).then(function (result) {
+                            var changed = refreshRequest.MoviePosters
+                                || refreshRequest.MovieLogos
+                                || refreshRequest.CollectionPosters
+                                || refreshRequest.CollectionLogos;
+                            if (!changed) {
+                                Dashboard.processPluginConfigurationUpdateResult(result);
+                                return;
+                            }
+
+                            ApiClient.ajax({
+                                url: ApiClient.getUrl('ChooseYourMeta/RefreshArtworkPreferences'),
+                                type: 'POST',
+                                contentType: 'application/json',
+                                data: JSON.stringify(refreshRequest)
+                            }).then(function () {
+                                loadedArtworkPreferences = selectedArtworkPreferences;
+                                Dashboard.processPluginConfigurationUpdateResult(result);
+                            }).catch(function () {
+                                Dashboard.hideLoadingMsg();
+                            });
+                        });
+                    });
+
+                    e.preventDefault();
+                    return false;
+                });
+
+            document.getElementById('ConfigureLibraries')
+                .addEventListener('click', function () {
+                    var resultElement = document.getElementById('ConfigureLibrariesResult');
+                    Dashboard.showLoadingMsg();
+                    ApiClient.ajax({
+                        url: ApiClient.getUrl('ChooseYourMeta/ConfigureLibraries'),
+                        type: 'POST',
+                        dataType: 'json'
+                    }).then(function (result) {
+                        var updated = result.updatedLibraries || result.UpdatedLibraries || [];
+                        resultElement.textContent = updated.length
+                            ? 'Настроено библиотек: ' + updated.join(', ')
+                            : 'Все подходящие библиотеки уже настроены.';
+                        Dashboard.hideLoadingMsg();
+                    }).catch(function () {
+                        resultElement.textContent = 'Не удалось изменить настройки библиотек. Проверьте журнал Jellyfin.';
+                        Dashboard.hideLoadingMsg();
+                    });
+                });
+        </script>
+    </div>
+</body>
+</html>
