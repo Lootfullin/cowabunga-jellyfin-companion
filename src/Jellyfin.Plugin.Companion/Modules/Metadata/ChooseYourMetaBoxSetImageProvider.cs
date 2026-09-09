@@ -91,8 +91,25 @@ public sealed class ChooseYourMetaBoxSetImageProvider
                 cancellationToken));
         }
 
+        result = SelectPreferredLanguages(result, config).ToList();
         CompanionPlugin.Images?.RegisterCandidates(item, result);
         return result;
+    }
+
+    // Jellyfin reorders remote images by the item's metadata language after GetImages.
+    // Returning both languages lets that override our independent artwork preference.
+    internal static IEnumerable<RemoteImageInfo> SelectPreferredLanguages(
+        IEnumerable<RemoteImageInfo> images, PluginConfiguration config)
+    {
+        foreach (var group in images.GroupBy(image => image.Type))
+        {
+            var preference = group.Key == ImageType.Primary
+                ? config.CollectionPosterPreference : config.CollectionLogoPreference;
+            if (preference == ArtworkLanguagePreference.Disabled) continue;
+            var language = preference == ArtworkLanguagePreference.EnglishFirst ? "en" : "ru";
+            var preferred = group.Where(image => string.Equals(image.Language, language, StringComparison.OrdinalIgnoreCase)).ToList();
+            foreach (var image in preferred.Count > 0 ? preferred : group.ToList()) yield return image;
+        }
     }
 
     private async Task<IEnumerable<RemoteImageInfo>> GetTmdbPosters(
