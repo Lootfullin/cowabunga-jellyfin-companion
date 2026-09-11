@@ -208,6 +208,8 @@ public sealed class ArtworkCoordinator(
             {
                 if (string.Equals(existingHash, source.Sha256, StringComparison.OrdinalIgnoreCase))
                 {
+                    // Also repair references left only in memory by older releases.
+                    await libraryManager.UpdateItemAsync(item, item.GetParent(), ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
                     Remember(key, source.Sha256, CompanionPlugin.ArtworkProviderName);
                     return true;
                 }
@@ -288,6 +290,9 @@ public sealed class ArtworkCoordinator(
             if (!LibraryPolicy.Allows(module, item)) return;
             await providerManager.SaveImage(item, temporary, response.Content.Headers.ContentType?.MediaType ?? "image/jpeg",
                 type, 0, false, cancellationToken).ConfigureAwait(false);
+            // SaveImage changes the file and in-memory item only. Persist the new
+            // image reference, just as Jellyfin's manual image download does.
+            await libraryManager.UpdateItemAsync(item, item.GetParent(), ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }

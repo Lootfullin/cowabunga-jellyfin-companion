@@ -45,6 +45,23 @@ public sealed class ArtworkCoordinatorTests : IDisposable
     private PendingArtwork Request()=>new() { ItemId=_movie.Id,Type=ImageType.Primary,Module=CompanionModule.Metadata };
 
     [Fact]
+    public async Task SavedImageReferenceIsPersistedBeforeReportingSuccess()
+    {
+        Assert.True(await _coordinator.ApplyAsync(Request(),default));
+        _context.Manager.Verify(value => value.UpdateItemAsync(_movie, It.IsAny<BaseItem>(),
+            ItemUpdateType.ImageUpdate, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task FailedImagePersistenceDoesNotReportSuccess()
+    {
+        _context.Manager.Setup(value => value.UpdateItemAsync(_movie, It.IsAny<BaseItem>(),
+            ItemUpdateType.ImageUpdate, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new IOException("Repository unavailable"));
+        await Assert.ThrowsAsync<IOException>(() => _coordinator.ApplyAsync(Request(), default));
+    }
+
+    [Fact]
     public async Task DisabledOrExcludedQueuedWorkDoesNotCallProviders()
     {
         Assert.True(_coordinator.Queue(_movie.Id,[ImageType.Primary],CompanionModule.Metadata));
