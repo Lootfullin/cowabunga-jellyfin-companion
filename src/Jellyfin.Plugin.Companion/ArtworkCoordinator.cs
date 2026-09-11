@@ -194,6 +194,11 @@ public sealed class ArtworkCoordinator(
         }
         if (!MayReplace(existingHash, managed?.Sha256, config.ReplaceExistingImages)) return true;
         if (existingPath is not null && IsMediaFile(item, existingPath) && !config.OverwriteExistingMediaFiles) return true;
+        foreach (var alias in CollectionArtworkStorage.Aliases(item, type))
+        {
+            if (!MayReplace(await HashAsync(alias, cancellationToken).ConfigureAwait(false), managed?.Sha256, config.ReplaceExistingImages))
+                return true;
+        }
 
         if (LibraryPolicy.Allows(CompanionModule.Artwork, item)
             && (type == ImageType.Primary ? config.Posters : config.Logos))
@@ -206,8 +211,11 @@ public sealed class ArtworkCoordinator(
             var source = type == ImageType.Primary ? artwork?.Poster : artwork?.Logo;
             if (source is not null)
             {
-                if (string.Equals(existingHash, source.Sha256, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(existingHash, source.Sha256, StringComparison.OrdinalIgnoreCase)
+                    && (!CollectionArtworkStorage.UsesNativeFolder(item)
+                        || existingPath is not null && LibraryPolicy.ContainsPath(item.Path, existingPath)))
                 {
+                    CollectionArtworkStorage.RetireAliases(item, type, existingPath!);
                     // Also repair references left only in memory by older releases.
                     await libraryManager.UpdateItemAsync(item, item.GetParent(), ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
                     Remember(key, source.Sha256, CompanionPlugin.ArtworkProviderName);
@@ -222,6 +230,8 @@ public sealed class ArtworkCoordinator(
                 var savedHash = await HashAsync(item.GetImageInfo(type, 0)?.Path, cancellationToken).ConfigureAwait(false);
                 if (!string.Equals(savedHash, source.Sha256, StringComparison.OrdinalIgnoreCase)) return false;
                 Remember(key, savedHash!, CompanionPlugin.ArtworkProviderName);
+                if (item is BoxSet)
+                    logger.LogInformation("Companion: saved custom collection artwork for {ItemId}/{Type}", item.Id, type);
                 return true;
             }
         }
@@ -289,7 +299,9 @@ public sealed class ArtworkCoordinator(
                 throw new InvalidDataException("Image hash mismatch.");
             if (!LibraryPolicy.Allows(module, item)) return;
             await providerManager.SaveImage(item, temporary, response.Content.Headers.ContentType?.MediaType ?? "image/jpeg",
-                type, 0, false, cancellationToken).ConfigureAwait(false);
+                type, 0, CollectionArtworkStorage.UsesNativeFolder(item) ? null : false, cancellationToken).ConfigureAwait(false);
+            if (item.GetImageInfo(type, 0)?.Path is { } savedPath)
+                CollectionArtworkStorage.RetireAliases(item, type, savedPath);
             // SaveImage changes the file and in-memory item only. Persist the new
             // image reference, just as Jellyfin's manual image download does.
             await libraryManager.UpdateItemAsync(item, item.GetParent(), ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);

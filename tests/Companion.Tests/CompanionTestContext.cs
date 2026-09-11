@@ -18,6 +18,7 @@ internal sealed class CompanionTestContext : IDisposable
         Directory.CreateDirectory(Root);
         var paths = new Mock<IApplicationPaths>();
         paths.SetupGet(value => value.PluginsPath).Returns(Root);
+        paths.SetupGet(value => value.DataPath).Returns(Path.Combine(Root, "data"));
         paths.SetupGet(value => value.PluginConfigurationsPath).Returns(Path.Combine(Root, "configurations"));
         var serializer = new Mock<IXmlSerializer>();
         serializer.Setup(value => value.DeserializeFromFile(typeof(PluginConfiguration), It.IsAny<string>()))

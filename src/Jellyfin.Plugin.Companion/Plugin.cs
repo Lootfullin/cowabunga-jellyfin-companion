@@ -23,6 +23,7 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public override Guid Id => Guid.Parse(PluginGuid);
     public override string Description => "Media recognition, localized metadata and Cowabunga artwork with per-library controls.";
     internal static PluginConfiguration GetConfiguration() => Instance?.Configuration ?? new();
+    internal string CollectionsPath => Path.Combine(ApplicationPaths.DataPath, "collections");
     public override void UpdateConfiguration(BasePluginConfiguration configuration)
     {
         var config = (PluginConfiguration)configuration;
