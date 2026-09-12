@@ -45,6 +45,7 @@ public sealed partial class ArtworkIndex
     private HashSet<string> _allowedPaths = new(StringComparer.Ordinal);
     private ArtworkManifest? _manifest;
     private ArtworkState? _pendingState;
+    private Func<BaseItem, ArtworkSet?>? _matchNewItem;
 
     public ArtworkIndex(
         ILogger<ArtworkIndex> logger,
@@ -110,7 +111,9 @@ public sealed partial class ArtworkIndex
             return byIdentity;
         }
 
-        return null;
+        // A collection can be created while the library map is still fresh.
+        // Match it against the already downloaded manifest without waiting for a full rebuild.
+        return _matchNewItem?.Invoke(item);
     }
 
     public async Task BuildAsync(
@@ -363,6 +366,8 @@ public sealed partial class ArtworkIndex
 
         _byIdentity = identities;
         _byItemId = itemIds;
+        _matchNewItem = item => MatchItem(item, byRelease, byCollection, byPublishedIdentity,
+            byCollectionPart, byCustomCollectionKey, null);
         _allowedPaths = manifest.Files.Select(file => file.Path).ToHashSet(StringComparer.Ordinal);
         Count = itemIds.Count;
         ChangedItemIds = changed;

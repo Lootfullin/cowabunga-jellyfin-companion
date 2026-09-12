@@ -35,6 +35,24 @@ public sealed class ArtworkCoordinator(
     private string StatePath => Path.Combine(CompanionPlugin.Instance!.DataFolderPath, "companion-artwork.v1.json");
     public int PendingCount { get { lock (_sync) { Load(); return _state.Pending.Count; } } }
 
+    internal (ManagedArtwork? Managed, ManagedArtwork? Expected, PendingArtwork? Pending, int? Position) Inspect(Guid itemId, ImageType type)
+    {
+        lock (_sync)
+        {
+            Load();
+            var key = $"{itemId:N}/{type}";
+            _state.Managed.TryGetValue(key, out var managed);
+            _state.Expected.TryGetValue(key, out var expected);
+            var entries = _state.Pending.Values.ToArray();
+            var position = Array.FindIndex(entries, p => p.ItemId == itemId && p.Type == type && p.Module == CompanionModule.Artwork);
+            var pending = position < 0 ? null : entries[position];
+            return (managed, expected, pending is null ? null : new PendingArtwork {
+                ItemId = pending.ItemId, Type = pending.Type, Module = pending.Module,
+                Attempts = pending.Attempts, NextAttemptUtc = pending.NextAttemptUtc
+            }, position < 0 ? null : position + 1);
+        }
+    }
+
     internal void RegisterCandidates(BaseItem item, IEnumerable<RemoteImageInfo> candidates)
     {
         lock (_sync)

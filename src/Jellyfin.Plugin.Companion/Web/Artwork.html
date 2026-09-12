@@ -76,6 +76,17 @@
                     <span>Сохранить и проверить</span>
                 </button>
             </form>
+            <h2>Проверка изображений коллекции</h2>
+            <p class="fieldDescription">Показывает причину пропуска замены по текущим настройкам, файлам и очереди. Изображения при проверке не меняются.</p>
+            <form id="CollectionDiagnosticForm">
+                <div class="inputContainer">
+                    <label class="inputLabel" for="CollectionDiagnosticSearch">Название коллекции или TMDB ID</label>
+                    <input is="emby-input" id="CollectionDiagnosticSearch" type="text" maxlength="100" required />
+                </div>
+                <button is="emby-button" type="submit" id="CheckCollectionArtwork" class="raised block">Проверить коллекцию</button>
+            </form>
+            <div id="CollectionDiagnosticResult" role="status" style="white-space:pre-wrap;overflow-wrap:anywhere;margin:1em 0"></div>
+            <button is="emby-button" type="button" id="DownloadCollectionDiagnostic" class="raised block" hidden>Скачать отчёт проверки</button>
         </div>
     </div>
 
@@ -83,6 +94,47 @@
         (function () {
             var pluginId = '0a281de0-d3c8-43ef-bf2d-5fac17fbb8c6';
             var page = document.querySelector('#CustomArtworkConfigPage');
+            var diagnosticReport = null;
+            page.querySelector('#CollectionDiagnosticForm').addEventListener('submit', function (event) {
+                event.preventDefault();
+                var search = page.querySelector('#CollectionDiagnosticSearch').value.trim();
+                if (!search) return;
+                var button = page.querySelector('#CheckCollectionArtwork');
+                var output = page.querySelector('#CollectionDiagnosticResult');
+                var download = page.querySelector('#DownloadCollectionDiagnostic');
+                button.disabled = true;
+                diagnosticReport = null;
+                download.hidden = true;
+                output.textContent = 'Проверяем файлы и очередь…';
+                ApiClient.ajax({ type: 'GET', url: ApiClient.getUrl('CowabungaCompanion/Artwork/Collections', { search: search }), dataType: 'json' })
+                    .then(function (report) {
+                        diagnosticReport = report;
+                        var lines = ['Версия ' + report.Version + '. Изображений в очереди: ' + report.PendingImages + '.'];
+                        (report.Collections || []).forEach(function (collection) {
+                            lines.push('', collection.Name + ' · TMDB ' + (collection.TmdbId || 'не указан'));
+                            (collection.Images || []).forEach(function (image) {
+                                lines.push((image.Type === 'Primary' ? 'Постер: ' : 'Лого: ') + image.Status);
+                                if (image.QueuePosition != null) lines.push('Позиция в списке очереди: ' + image.QueuePosition);
+                            });
+                        });
+                        if (!(report.Collections || []).length) lines.push('Коллекция не найдена. Попробуйте TMDB ID или часть названия.');
+                        output.textContent = lines.join('\n');
+                        download.hidden = false;
+                    }).catch(function () {
+                        output.textContent = 'Не удалось выполнить проверку. Убедитесь, что сервер перезапущен после обновления плагина.';
+                    }).then(function () { button.disabled = false; });
+            });
+            page.querySelector('#DownloadCollectionDiagnostic').addEventListener('click', function () {
+                if (!diagnosticReport) return;
+                var url = URL.createObjectURL(new Blob([JSON.stringify(diagnosticReport, null, 2)], { type: 'application/json' }));
+                var link = document.createElement('a');
+                link.href = url;
+                link.download = 'companion-collection-diagnostic.json';
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+            });
 
             function updateOverwriteVisibility() {
                 var mediaFolderSelected = page.querySelector('#StorageMode').value === 'MediaFolder';
