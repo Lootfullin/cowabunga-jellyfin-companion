@@ -77,7 +77,8 @@ public sealed class CollectionArtworkDiagnostics(ILibraryManager library, Artwor
         }
         return Ok(new { Version = typeof(CollectionArtworkDiagnostics).Assembly.GetName().Version?.ToString(),
             CheckedUtc = DateTime.UtcNow, index.BuiltUtc, index.Revision, index.RemoteArtworkAvailable, PendingImages = coordinator.PendingCount,
-            config.CollectionArtworkEnabled, config.ReplaceExistingImages, Collections = results });
+            config.CollectionArtworkEnabled, config.ReplaceExistingImages, config.StorageMode,
+            Worker = coordinator.WorkerStatus, Collections = results });
     }
 
     private static async Task<(string? Hash, string? Error)> ReadHash(string? path, CancellationToken token)
@@ -85,7 +86,9 @@ public sealed class CollectionArtworkDiagnostics(ILibraryManager library, Artwor
         if (string.IsNullOrEmpty(path)) return (null, null);
         try
         {
-            await using var stream = System.IO.File.OpenRead(path);
+            // Diagnostics must not lock out the background writer while hashing a file.
+            await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
             return (Convert.ToHexString(await SHA256.HashDataAsync(stream, token).ConfigureAwait(false)), null);
         }
         catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { return (null, null); }

@@ -110,6 +110,11 @@
                     .then(function (report) {
                         diagnosticReport = report;
                         var lines = ['Версия ' + report.Version + '. Изображений в очереди: ' + report.PendingImages + '.'];
+                        if (report.Worker) {
+                            lines.push('Обработано заданий с запуска сервера: ' + report.Worker.ProcessedSinceStart + '.');
+                            if (report.Worker.WaitingForWriteLock) lines.push('Очередь ожидает завершения другой операции с изображениями.');
+                            else if (report.Worker.ActiveItemId) lines.push('Сейчас обрабатывается изображение другой позиции или этой коллекции.');
+                        }
                         (report.Collections || []).forEach(function (collection) {
                             lines.push('', collection.Name + ' · TMDB ' + (collection.TmdbId || 'не указан'));
                             (collection.Images || []).forEach(function (image) {

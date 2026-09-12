@@ -162,12 +162,12 @@ public sealed class RefreshIndexTask : IScheduledTask
     private void RequeueChangedItems(IEnumerable<ArtworkRefreshRequest> requests)
     {
         var changed = MergeRefreshRequests(requests);
-        CompanionPlugin.Images?.QueueMany(changed.Select(request =>
-            (request.ItemId, (IEnumerable<ImageType>)request.ImageTypes)), CompanionModule.Artwork);
+        var queued = CompanionPlugin.Images?.QueueMany(changed.Select(request =>
+            (request.ItemId, (IEnumerable<ImageType>)request.ImageTypes)), CompanionModule.Artwork) ?? 0;
 
         _logger.LogInformation(
-            "Custom Artwork: обновление изображений поставлено в очередь для {Count} позиций",
-            changed.Count);
+            "Custom Artwork: новые задания изображений добавлены для {Count} позиций",
+            queued);
     }
 
     internal static IReadOnlyList<ArtworkRefreshRequest> MergeRefreshRequests(

@@ -4,6 +4,7 @@ using Jellyfin.Plugin.Companion.Configuration;
 using Jellyfin.Plugin.CustomArtwork;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
@@ -30,6 +31,9 @@ public sealed class ArtworkCoordinator(
     private readonly object _sync = new();
     private ArtworkQueueState _state = new();
     private bool _loaded;
+    private long _lastQueueOrder;
+    private ArtworkWorkerStatus _workerStatus = new();
+    internal ArtworkWorkerStatus WorkerStatus => Volatile.Read(ref _workerStatus);
     private readonly Dictionary<string, HashSet<string>> _candidates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _expectedHashes = new(StringComparer.Ordinal);
     private string StatePath => Path.Combine(CompanionPlugin.Instance!.DataFolderPath, "companion-artwork.v1.json");
@@ -43,12 +47,12 @@ public sealed class ArtworkCoordinator(
             var key = $"{itemId:N}/{type}";
             _state.Managed.TryGetValue(key, out var managed);
             _state.Expected.TryGetValue(key, out var expected);
-            var entries = _state.Pending.Values.ToArray();
+            var entries = _state.Pending.Values.OrderBy(p => p.QueueOrder).ToArray();
             var position = Array.FindIndex(entries, p => p.ItemId == itemId && p.Type == type && p.Module == CompanionModule.Artwork);
             var pending = position < 0 ? null : entries[position];
             return (managed, expected, pending is null ? null : new PendingArtwork {
                 ItemId = pending.ItemId, Type = pending.Type, Module = pending.Module,
-                Attempts = pending.Attempts, NextAttemptUtc = pending.NextAttemptUtc
+                Attempts = pending.Attempts, NextAttemptUtc = pending.NextAttemptUtc, QueueOrder = pending.QueueOrder
             }, position < 0 ? null : position + 1);
         }
     }
@@ -126,8 +130,12 @@ public sealed class ArtworkCoordinator(
 
     internal int QueueMany(IEnumerable<(Guid ItemId, IEnumerable<ImageType> Types)> requests, CompanionModule module)
     {
-        var accepted = requests.Where(request => LibraryPolicy.Allows(module, libraryManager.GetItemById(request.ItemId))).ToArray();
-        var changed = false;
+        var accepted = requests.Where(request =>
+        {
+            var item = libraryManager.GetItemById(request.ItemId);
+            return LibraryPolicy.Allows(module, item) && !UsesMediaWriter(module, item);
+        }).ToArray();
+        var queuedItems = new HashSet<Guid>();
         lock (_sync)
         {
             Load();
@@ -135,61 +143,103 @@ public sealed class ArtworkCoordinator(
             foreach (var type in types.Where(type => type is ImageType.Primary or ImageType.Logo).Distinct())
             {
                 var key = $"{itemId:N}/{type}/{module}";
-                changed |= _state.Pending.TryAdd(key, new PendingArtwork { ItemId = itemId, Type = type, Module = module });
+                if (_state.Pending.ContainsKey(key)) continue;
+                _state.Pending.Add(key, new PendingArtwork { ItemId = itemId, Type = type, Module = module, QueueOrder = ++_lastQueueOrder });
+                queuedItems.Add(itemId);
             }
-            if (changed) Save();
+            if (queuedItems.Count > 0) Save();
         }
-        return accepted.Length;
+        return queuedItems.Count;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
         while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
+            await ProcessBatchAsync(stoppingToken).ConfigureAwait(false);
+    }
+
+    internal async Task ProcessBatchAsync(CancellationToken stoppingToken)
+    {
+        RemoveDelegatedRequests(stoppingToken);
+        KeyValuePair<string, PendingArtwork>[] due;
+        lock (_sync)
         {
-            KeyValuePair<string, PendingArtwork>[] due;
+            Load();
+            due = _state.Pending.Where(pair => pair.Value.NextAttemptUtc <= DateTime.UtcNow)
+                .OrderBy(pair => pair.Value.QueueOrder).Take(50).ToArray();
+        }
+        foreach (var (key, pending) in due)
+        {
+            stoppingToken.ThrowIfCancellationRequested();
+            var success = false;
+            _workerStatus = _workerStatus with { ActiveItemId = pending.ItemId, ActiveType = pending.Type.ToString(),
+                ActiveSinceUtc = DateTime.UtcNow, WaitingForWriteLock = true };
+            try
+            {
+                await ArtworkOperations.Gate.WaitAsync(stoppingToken).ConfigureAwait(false);
+                _workerStatus = _workerStatus with { WaitingForWriteLock = false };
+                try { success = await ApplyAsync(pending, stoppingToken).ConfigureAwait(false); }
+                finally { ArtworkOperations.Gate.Release(); }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
+            catch (Exception error)
+            {
+                // Do not log remote URLs, which may contain credentials.
+                logger.LogWarning("Companion artwork update failed for {ItemId}/{Type}: {ErrorType}",
+                    pending.ItemId, pending.Type, error.GetType().Name);
+            }
             lock (_sync)
             {
-                Load();
-                due = _state.Pending.Where(pair => pair.Value.NextAttemptUtc <= DateTime.UtcNow).Take(50).ToArray();
+                if (success) _state.Pending.Remove(key);
+                else
+                {
+                    pending.Attempts++;
+                    pending.NextAttemptUtc = DateTime.UtcNow + RetryDelay(pending.Attempts);
+                }
+                Save();
             }
-            foreach (var (key, pending) in due)
-            {
-                stoppingToken.ThrowIfCancellationRequested();
-                var success = false;
-                try
-                {
-                    await ArtworkOperations.Gate.WaitAsync(stoppingToken).ConfigureAwait(false);
-                    try { success = await ApplyAsync(pending, stoppingToken).ConfigureAwait(false); }
-                    finally { ArtworkOperations.Gate.Release(); }
-                }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
-                catch (Exception error)
-                {
-                    // Do not log remote URLs, which may contain credentials.
-                    logger.LogWarning("Companion artwork update failed for {ItemId}/{Type}: {ErrorType}",
-                        pending.ItemId, pending.Type, error.GetType().Name);
-                }
-                lock (_sync)
-                {
-                    if (success) _state.Pending.Remove(key);
-                    else
-                    {
-                        pending.Attempts++;
-                        pending.NextAttemptUtc = DateTime.UtcNow + RetryDelay(pending.Attempts);
-                    }
-                    Save();
-                }
-            }
+            _workerStatus = _workerStatus with { ActiveItemId = null, ActiveType = null, ActiveSinceUtc = null,
+                WaitingForWriteLock = false, LastProcessedUtc = DateTime.UtcNow,
+                ProcessedSinceStart = _workerStatus.ProcessedSinceStart + 1 };
         }
     }
 
     internal static TimeSpan RetryDelay(int attempts) => TimeSpan.FromMinutes(Math.Min(1440, Math.Pow(2, Math.Min(11, Math.Max(0, attempts - 1)))));
 
+    private static bool UsesMediaWriter(CompanionModule module, BaseItem? item) => module == CompanionModule.Artwork
+        && CompanionPlugin.GetConfiguration().StorageMode == PluginConfiguration.MediaFolderStorage
+        && item is Movie or Series or Season;
+
+    // Discard only duplicate jobs delegated to ArtworkMediaWriter, including those
+    // persisted by older versions. Ownership records and actual media files are untouched.
+    private void RemoveDelegatedRequests(CancellationToken cancellationToken)
+    {
+        if (CompanionPlugin.GetConfiguration().StorageMode != PluginConfiguration.MediaFolderStorage) return;
+        KeyValuePair<string, PendingArtwork>[] pending;
+        lock (_sync) { Load(); pending = _state.Pending.Where(p => p.Value.Module == CompanionModule.Artwork).ToArray(); }
+        var delegated = new List<KeyValuePair<string, PendingArtwork>>();
+        foreach (var entry in pending)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (UsesMediaWriter(entry.Value.Module, libraryManager.GetItemById(entry.Value.ItemId))) delegated.Add(entry);
+        }
+        lock (_sync)
+        {
+            if (CompanionPlugin.GetConfiguration().StorageMode != PluginConfiguration.MediaFolderStorage) return;
+            var changed = false;
+            foreach (var entry in delegated)
+                if (_state.Pending.TryGetValue(entry.Key, out var current) && ReferenceEquals(current, entry.Value))
+                    changed |= _state.Pending.Remove(entry.Key);
+            if (changed) Save();
+        }
+    }
+
     internal async Task<bool> ApplyAsync(PendingArtwork request, CancellationToken cancellationToken)
     {
         var item = libraryManager.GetItemById(request.ItemId);
         if (!LibraryPolicy.Allows(request.Module, item)) return true;
+        if (UsesMediaWriter(request.Module, item)) return true;
         if (item!.IsLocked) return true;
         var config = CompanionPlugin.GetConfiguration();
         if (request.Module == CompanionModule.Metadata && !config.MetadataImagesEnabled) return true;
@@ -346,6 +396,15 @@ public sealed class ArtworkCoordinator(
             catch (JsonException) { logger.LogWarning("Companion artwork state could not be read; existing images will be protected."); }
         }
         _loaded = true;
+        _lastQueueOrder = _state.Pending.Values.Select(p => p.QueueOrder).DefaultIfEmpty(0).Max();
+        var migrated = false;
+        foreach (var pending in _state.Pending.Values)
+        {
+            if (pending.QueueOrder > 0) continue;
+            pending.QueueOrder = ++_lastQueueOrder;
+            migrated = true;
+        }
+        if (migrated) Save();
     }
     private void Save()
     {
@@ -369,9 +428,20 @@ internal sealed class PendingArtwork
     public CompanionModule Module { get; set; }
     public int Attempts { get; set; }
     public DateTime NextAttemptUtc { get; set; }
+    public long QueueOrder { get; set; }
 }
 internal sealed class ManagedArtwork
 {
     public string Sha256 { get; set; } = "";
     public string Source { get; set; } = "";
+}
+
+internal sealed record ArtworkWorkerStatus
+{
+    public Guid? ActiveItemId { get; init; }
+    public string? ActiveType { get; init; }
+    public DateTime? ActiveSinceUtc { get; init; }
+    public bool WaitingForWriteLock { get; init; }
+    public DateTime? LastProcessedUtc { get; init; }
+    public long ProcessedSinceStart { get; init; }
 }
