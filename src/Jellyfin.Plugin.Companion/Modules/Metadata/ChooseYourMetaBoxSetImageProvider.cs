@@ -151,7 +151,7 @@ public sealed class ChooseYourMetaBoxSetImageProvider
                     Name);
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(
                 ex,
@@ -193,7 +193,7 @@ public sealed class ChooseYourMetaBoxSetImageProvider
                     Name);
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(
                 ex,

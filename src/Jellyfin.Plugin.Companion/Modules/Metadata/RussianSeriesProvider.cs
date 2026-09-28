@@ -384,7 +384,7 @@ public partial class RussianSeriesProvider : IRemoteMetadataProvider<Series, Ser
             _logger.LogInformation("RussianMetadata (Series): TMDB success for {Name} -> {Title}", name, tvDetails.Name);
             return true;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "RussianMetadata (Series): TMDB failed for {Name}, will fallback", name);
             return false;
@@ -440,7 +440,7 @@ public partial class RussianSeriesProvider : IRemoteMetadataProvider<Series, Ser
 
             return changed;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(ex, "RussianMetadata (Series): Wikidata error for {ImdbId}", imdbId);
             return false;
@@ -582,7 +582,7 @@ LIMIT 1";
                 EnglishDescription = binding.EnDescription?.Value
             };
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(ex, "RussianMetadata (Series): Wikidata fetch error for {ImdbId}", imdbId);
             return null;
@@ -636,7 +636,7 @@ LIMIT 1";
                     }
                 }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 _logger.LogWarning(ex, "RussianMetadata (Series): TMDB search failed, fallback to Wikidata");
             }
@@ -680,7 +680,7 @@ LIMIT 10";
                 }
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(ex, "RussianMetadata (Series): Wikidata search error");
         }

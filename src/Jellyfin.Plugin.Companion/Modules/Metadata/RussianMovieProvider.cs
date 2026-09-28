@@ -25,6 +25,7 @@ public partial class RussianMovieProvider :
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<RussianMovieProvider> _logger;
+    private readonly Func<Configuration.PluginConfiguration, HttpClient> _createTmdbClient;
     private CompanionPlugin CurrentPlugin => CompanionPlugin.Instance!;
 
     private const string TmdbApiBase = "https://api.themoviedb.org/3";
@@ -36,9 +37,18 @@ public partial class RussianMovieProvider :
     public RussianMovieProvider(
         IHttpClientFactory httpClientFactory,
         ILogger<RussianMovieProvider> logger)
+        : this(httpClientFactory, logger, config => new HttpClient(CreateProxyHandler(config), disposeHandler: true))
+    {
+    }
+
+    internal RussianMovieProvider(
+        IHttpClientFactory httpClientFactory,
+        ILogger<RussianMovieProvider> logger,
+        Func<Configuration.PluginConfiguration, HttpClient> createTmdbClient)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _createTmdbClient = createTmdbClient;
     }
 
     public string Name => CompanionPlugin.MetadataProviderName;
@@ -71,8 +81,7 @@ public partial class RussianMovieProvider :
 
         try
         {
-            using var handler = CreateProxyHandler(config);
-            using var httpClient = new HttpClient(handler, disposeHandler: true);
+            using var httpClient = _createTmdbClient(config);
             httpClient.DefaultRequestHeaders.TryAddWithoutValidation(
                 "Accept",
                 "application/json");
@@ -134,6 +143,7 @@ public partial class RussianMovieProvider :
 
             var changed = identityChanged
                 | ApplyTmdbCollection(item, details.BelongsToCollection);
+            changed |= ApplyReleaseDate(item, details.ReleaseDate);
             var russianTitle = MovieTextLocalization.RussianOrNull(details.Title);
             if (config.EnableRussianTitles && !item.LockedFields.Contains(MetadataField.Name)
                 && !string.IsNullOrWhiteSpace(russianTitle)
@@ -152,7 +162,9 @@ public partial class RussianMovieProvider :
             changed |= MovieTextLocalization.ApplyDescription(item, details.Overview, details.Tagline, config);
             return changed ? ItemUpdateType.MetadataEdit : ItemUpdateType.None;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // HttpClient timeouts also throw OperationCanceledException. Only the
+        // refresh token being cancelled should abort Jellyfin's whole refresh.
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(
                 ex,
@@ -209,7 +221,9 @@ public partial class RussianMovieProvider :
         // Wikidata is a field-level fallback. For example, TMDB can have a
         // Russian overview but leave the localized title in English.
         bool wikidataSuccess = false;
-        if (!string.IsNullOrEmpty(imdbId))
+        if (!string.IsNullOrEmpty(imdbId)
+            && ((config.EnableRussianTitles && MovieTextLocalization.RussianOrNull(result.Item.Name) is null)
+                || (config.EnableRussianOverviews && MovieTextLocalization.RussianOrNull(result.Item.Overview) is null)))
         {
             wikidataSuccess = await TryWikidata(
                 imdbId,
@@ -253,8 +267,7 @@ public partial class RussianMovieProvider :
         try
         {
             result.Item ??= new Movie();
-            var handler = CreateProxyHandler(config);
-            using var httpClient = new HttpClient(handler, disposeHandler: true);
+            using var httpClient = _createTmdbClient(config);
             httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json");
             httpClient.Timeout = TimeSpan.FromSeconds(5);
 
@@ -329,6 +342,8 @@ public partial class RussianMovieProvider :
             _logger.LogInformation("RussianMetadata: TMDB details parsed — Title={T}, OriginalTitle={Ot}, OverviewLen={Ol}", movieDetails?.Title ?? "N", movieDetails?.OriginalTitle ?? "N", movieDetails?.Overview?.Length ?? 0);
 
             if (movieDetails == null) return false;
+
+            ApplyReleaseDate(result.Item, movieDetails.ReleaseDate);
 
             if (config.EnableRussianTitles)
             {
@@ -408,7 +423,7 @@ public partial class RussianMovieProvider :
                 movieDetails.Title);
             return true;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "RussianMetadata: TMDB failed for {ImdbId}, will fallback", imdbId);
             return false;
@@ -442,6 +457,18 @@ public partial class RussianMovieProvider :
             || !string.Equals(previousName, collectionName, StringComparison.Ordinal);
     }
 
+    internal static bool ApplyReleaseDate(Movie movie, string? releaseDate)
+    {
+        if (movie.IsLocked || !DateTime.TryParseExact(releaseDate, "yyyy-MM-dd",
+            CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out var date)) return false;
+
+        var changed = movie.ProductionYear != date.Year || movie.PremiereDate != date;
+        movie.ProductionYear = date.Year;
+        movie.PremiereDate = date;
+        return changed;
+    }
+
     private async Task<bool> TryWikidata(string imdbId, Configuration.PluginConfiguration config,
         MetadataResult<Movie> result, CancellationToken cancellationToken)
     {
@@ -464,7 +491,7 @@ public partial class RussianMovieProvider :
 
             if (hasRussianLabel
                 && config.EnableRussianTitles
-                && string.IsNullOrEmpty(result.Item.Name))
+                && MovieTextLocalization.RussianOrNull(result.Item.Name) is null)
             {
                 result.Item.Name = entity.RussianLabel;
                 changed = true;
@@ -492,14 +519,14 @@ public partial class RussianMovieProvider :
 
             return changed;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(ex, "RussianMetadata: Wikidata error for {ImdbId}", imdbId);
             return false;
         }
     }
 
-    private HttpClientHandler CreateProxyHandler(Configuration.PluginConfiguration config)
+    private static HttpClientHandler CreateProxyHandler(Configuration.PluginConfiguration config)
     {
         var handler = new HttpClientHandler();
 
@@ -515,7 +542,6 @@ public partial class RussianMovieProvider :
                 }
                 handler.Proxy = webProxy;
                 handler.UseProxy = true;
-                _logger.LogInformation("RussianMetadata: Using proxy {Proxy}", config.ProxyUrl);
             }
         }
 
@@ -590,7 +616,7 @@ SELECT ?externalId ?ruLabel WHERE {{
                     EqualityComparer<int>.Default)
                 ?? [];
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(
                 ex,
@@ -668,7 +694,7 @@ LIMIT 1";
                 EnglishDescription = binding.EnDescription?.Value
             };
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(ex, "RussianMetadata: Wikidata fetch error for {ImdbId}", imdbId);
             return null;
@@ -698,7 +724,7 @@ LIMIT 1";
                 var matches = await MovieManualSearch.SearchAsync(httpClient, tmdbApiKey, searchInfo, Name, cancellationToken);
                 if (matches.Count > 0) return matches;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 _logger.LogWarning(ex, "RussianMetadata: TMDB search failed, fallback to Wikidata");
             }
@@ -742,7 +768,7 @@ LIMIT 10";
                 }
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(ex, "RussianMetadata: Wikidata search error");
         }

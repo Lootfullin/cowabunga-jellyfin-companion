@@ -234,7 +234,7 @@ public partial class RussianEpisodeProvider : IRemoteMetadataProvider<Episode, E
 
             return changed;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(
                 ex,

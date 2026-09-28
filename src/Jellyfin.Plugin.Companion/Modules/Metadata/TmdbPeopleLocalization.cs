@@ -196,7 +196,9 @@ internal static class TmdbPeopleLocalization
                 RussianNameCache.Count);
             return CachedRussianNames(ids);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // Optional translation must not discard TMDB credits or movie metadata
+        // when Wikidata times out. A real refresh cancellation still propagates.
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             logger.LogWarning(
                 ex,

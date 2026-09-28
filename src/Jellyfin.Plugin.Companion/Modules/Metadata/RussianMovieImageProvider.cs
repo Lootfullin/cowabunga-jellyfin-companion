@@ -143,7 +143,7 @@ public sealed class RussianMovieImageProvider : IRemoteImageProvider, IDisposabl
             CompanionPlugin.Images?.RegisterCandidates(item, result);
             return result;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(
                 ex,

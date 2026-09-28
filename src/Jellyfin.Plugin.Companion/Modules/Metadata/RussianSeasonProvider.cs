@@ -229,7 +229,7 @@ public sealed class RussianSeasonProvider :
                 json,
                 JsonOptions.Default);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(
                 ex,

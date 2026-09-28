@@ -104,7 +104,7 @@ public sealed class ChooseYourMetaBoxSetProvider
             result.ResultLanguage = "ru";
             return result;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(
                 ex,
@@ -186,7 +186,7 @@ public sealed class ChooseYourMetaBoxSetProvider
 
             return changed ? ItemUpdateType.MetadataEdit : ItemUpdateType.None;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "ChooseYourMeta: final BoxSet localization failed for TMDB {TmdbId}", tmdbId);
             return ItemUpdateType.None;
@@ -248,7 +248,7 @@ public sealed class ChooseYourMetaBoxSetProvider
                 .ToArray()
                 ?? [];
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(
                 ex,
