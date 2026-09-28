@@ -19,7 +19,7 @@ public sealed class LegacyMigration(IApplicationPaths paths, IPluginManager plug
     private static readonly string[][] Fields =
     [
         ["Enabled", "NestedSeriesEnabled", "NestedSeriesMode", "CustomRegex", "RequireExactlyOneEligibleChild", "MoviesEnabled", "NestedMoviesEnabled", "EnableResolutionLogs", "EnableRejectionLogs"],
-        ["TmdbApiKey", "EnableRussianTitles", "EnableRussianOverviews", "EnableRussianTaglines", "EnableRussianGenres", "EnableRussianStudios", "EnableRussianPeople", "ForeignMoviePosterPreference", "ForeignMovieLogoPreference", "RussianMoviePosterPreference", "RussianMovieLogoPreference", "CollectionPosterPreference", "CollectionLogoPreference", "ProxyUrl", "ProxyUsername", "ProxyPassword"],
+        ["TmdbApiKey", "EnableRussianTitles", "EnableRussianOverviews", "EnableRussianTaglines", "EnableRussianGenres", "EnableRussianPeople", "ForeignMoviePosterPreference", "ForeignMovieLogoPreference", "RussianMoviePosterPreference", "RussianMovieLogoPreference", "CollectionPosterPreference", "CollectionLogoPreference", "ProxyUrl", "ProxyUsername", "ProxyPassword"],
         ["RefreshIntervalMinutes", "Posters", "Logos", "StorageMode", "OverwriteExistingMediaFiles"]
     ];
 

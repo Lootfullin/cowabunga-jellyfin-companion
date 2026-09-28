@@ -376,19 +376,10 @@ public partial class RussianMovieProvider :
                     .ToArray();
             }
 
-            if (config.EnableRussianStudios && movieDetails.ProductionCompanies is { Count: > 0 })
+            if (movieDetails.ProductionCompanies is { Count: > 0 })
             {
-                var companyIds = movieDetails.ProductionCompanies
-                    .Where(company => company.Id > 0)
-                    .Select(company => company.Id)
-                    .ToArray();
-                var russianCompanies = await FetchRussianLabelsByExternalIds(
-                    "P11806",
-                    companyIds,
-                    cancellationToken);
                 result.Item.Studios = movieDetails.ProductionCompanies
-                    .Select(company => russianCompanies.GetValueOrDefault(company.Id)
-                        ?? company.Name?.Trim())
+                    .Select(company => company.Name?.Trim())
                     .Where(name => !string.IsNullOrWhiteSpace(name))
                     .Cast<string>()
                     .ToArray();
@@ -555,75 +546,6 @@ public partial class RussianMovieProvider :
     private static string EscapeSparqlString(string s)
     {
         return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
-    }
-
-    private async Task<Dictionary<int, string>> FetchRussianLabelsByExternalIds(
-        string propertyId,
-        IReadOnlyCollection<int> ids,
-        CancellationToken cancellationToken)
-    {
-        if (ids.Count == 0)
-        {
-            return [];
-        }
-
-        using var httpClient = _httpClientFactory.CreateClient("RussianMetadata");
-        httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json");
-        httpClient.DefaultRequestHeaders.TryAddWithoutValidation(
-            "User-Agent",
-            "Jellyfin-RussianMetadata/1.3");
-        httpClient.Timeout = TimeSpan.FromSeconds(30);
-
-        var values = string.Join(
-            " ",
-            ids.Distinct().Select(id =>
-                $"\"{id.ToString(CultureInfo.InvariantCulture)}\""));
-        var sparqlQuery = $@"
-SELECT ?externalId ?ruLabel WHERE {{
-  VALUES ?externalId {{ {values} }}
-  ?item wdt:{propertyId} ?externalId.
-  ?item rdfs:label ?ruLabel.
-  FILTER(LANG(?ruLabel) = ""ru"")
-}}";
-        var url = $"{WikidataSparqlEndpoint}?format=json&query={Uri.EscapeDataString(sparqlQuery)}";
-
-        try
-        {
-            using var response = await httpClient.GetAsync(url, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                return [];
-            }
-
-            var json = await response.Content.ReadAsStringAsync(cancellationToken);
-            var result = JsonSerializer.Deserialize<SparqlResult>(
-                json,
-                JsonOptions.Default);
-            return result?.Results?.Bindings?
-                .Where(binding =>
-                    int.TryParse(
-                        binding.ExternalId?.Value,
-                        NumberStyles.None,
-                        CultureInfo.InvariantCulture,
-                        out _)
-                    && !string.IsNullOrWhiteSpace(binding.RuLabel?.Value))
-                .GroupBy(binding => binding.ExternalId!.Value!)
-                .ToDictionary(
-                    group => int.Parse(
-                        group.Key,
-                        CultureInfo.InvariantCulture),
-                    group => group.First().RuLabel!.Value!,
-                    EqualityComparer<int>.Default)
-                ?? [];
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
-        {
-            _logger.LogWarning(
-                ex,
-                "RussianMetadata: Wikidata label lookup failed for property {PropertyId}",
-                propertyId);
-            return [];
-        }
     }
 
     // ───── IMDb ID extraction ─────

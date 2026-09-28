@@ -59,12 +59,6 @@
 
                     <br/>
                     <label class="checkboxContainer">
-                        <input id="EnableRussianStudios" name="EnableRussianStudios" type="checkbox" is="emby-checkbox" checked />
-                        <span>Использовать русские названия студий, когда они существуют</span>
-                    </label>
-
-                    <br/>
-                    <label class="checkboxContainer">
                         <input id="EnableRussianPeople" name="EnableRussianPeople" type="checkbox" is="emby-checkbox" checked />
                         <span>Использовать русские имена актёров и съёмочной группы, когда они существуют</span>
                     </label>
@@ -199,7 +193,6 @@
                         document.getElementById('EnableRussianOverviews').checked = config.EnableRussianOverviews !== false;
                         document.getElementById('EnableRussianTaglines').checked = config.EnableRussianTaglines !== false;
                         document.getElementById('EnableRussianGenres').checked = config.EnableRussianGenres !== false;
-                        document.getElementById('EnableRussianStudios').checked = config.EnableRussianStudios !== false;
                         document.getElementById('EnableRussianPeople').checked = config.EnableRussianPeople !== false;
                         document.getElementById('ForeignMoviePosterPreference').value = artworkPreference(config.ForeignMoviePosterPreference, '1');
                         document.getElementById('ForeignMovieLogoPreference').value = artworkPreference(config.ForeignMovieLogoPreference, '1');
@@ -258,7 +251,6 @@
                         config.EnableRussianOverviews = document.getElementById('EnableRussianOverviews').checked;
                         config.EnableRussianTaglines = document.getElementById('EnableRussianTaglines').checked;
                         config.EnableRussianGenres = document.getElementById('EnableRussianGenres').checked;
-                        config.EnableRussianStudios = document.getElementById('EnableRussianStudios').checked;
                         config.EnableRussianPeople = document.getElementById('EnableRussianPeople').checked;
                         config.ForeignMoviePosterPreference = parseInt(document.getElementById('ForeignMoviePosterPreference').value, 10);
                         config.ForeignMovieLogoPreference = parseInt(document.getElementById('ForeignMovieLogoPreference').value, 10);

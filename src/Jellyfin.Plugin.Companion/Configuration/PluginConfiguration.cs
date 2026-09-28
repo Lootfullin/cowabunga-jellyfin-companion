@@ -59,7 +59,6 @@ public sealed class PluginConfiguration : BasePluginConfiguration
     public bool EnableRussianOverviews { get; set; } = true;
     public bool EnableRussianTaglines { get; set; } = true;
     public bool EnableRussianGenres { get; set; } = true;
-    public bool EnableRussianStudios { get; set; } = true;
     public bool EnableRussianPeople { get; set; } = true;
     public ArtworkLanguagePreference ForeignMoviePosterPreference { get; set; } =
         ArtworkLanguagePreference.EnglishFirst;

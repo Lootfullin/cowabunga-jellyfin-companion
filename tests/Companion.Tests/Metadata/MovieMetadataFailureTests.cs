@@ -9,7 +9,29 @@ using RussianMetadata;
 public sealed class MovieMetadataFailureTests
 {
     [Theory]
-    [InlineData("studio", 2300, "Космический Джем", 1996)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StudiosComeFromTmdbWithoutTranslationRequests(bool localizePeople)
+    {
+        using var context = new CompanionTestContext();
+        context.Config.TmdbApiKey = "test";
+        context.Config.EnableRussianPeople = localizePeople;
+        var handler = new MetadataHandler("studio", 2300, "Космический Джем", 1996);
+        var info = new MovieInfo { Path = Path.Combine(context.Root, "movie.mkv") };
+        info.ProviderIds["Tmdb"] = "2300";
+
+        var result = await CreateProvider(handler).GetMetadata(info, default);
+
+        Assert.True(result.HasMetadata);
+        Assert.Equal("Studio", Assert.Single(result.Item.Studios));
+        Assert.DoesNotContain(handler.RequestedUrls, url => url.Contains("P11806"));
+        Assert.False(handler.FailedRequest);
+        Assert.Equal(localizePeople, handler.RequestedUrls.Any(url => url.Contains("P4985")));
+        if (!localizePeople)
+            Assert.DoesNotContain(handler.RequestedUrls, url => url.Contains("wikidata.org"));
+    }
+
+    [Theory]
     [InlineData("people", 788, "Миссис Даутфайр", 1993)]
     [InlineData("fallback", 2300, "Космический Джем", 1996)]
     public async Task OptionalTimeoutKeepsVerifiedMovie(string failure, int id, string title, int year)
@@ -39,7 +61,6 @@ public sealed class MovieMetadataFailureTests
         using var context = new CompanionTestContext();
         context.Config.TmdbApiKey = "test";
         context.Config.EnableRussianPeople = false;
-        context.Config.EnableRussianStudios = false;
         var handler = new MetadataHandler("fallback", 788, "Миссис Даутфайр", 1993) { CompleteText = true };
         var info = new MovieInfo { Path = Path.Combine(context.Root, "movie.mkv") };
         info.ProviderIds["Tmdb"] = "788";
@@ -48,7 +69,6 @@ public sealed class MovieMetadataFailureTests
     }
 
     [Theory]
-    [InlineData("studio")]
     [InlineData("people")]
     [InlineData("fallback")]
     public async Task ActualRefreshCancellationStillPropagates(string failure)
@@ -91,10 +111,12 @@ public sealed class MovieMetadataFailureTests
         public int PersonId { get; } = Interlocked.Increment(ref _nextPersonId);
         public bool CompleteText { get; init; }
         public bool FailedRequest { get; private set; }
+        public List<string> RequestedUrls { get; } = [];
         public CancellationTokenSource? CancelCaller { get; init; }
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
             var url = Uri.UnescapeDataString(request.RequestUri!.ToString());
+            RequestedUrls.Add(url);
             string json;
             if (url.Contains("api.themoviedb.org"))
                 json = JsonSerializer.Serialize(new { id, title, imdb_id = "tt0117705", release_date = $"{year}-11-15", overview = failure == "fallback" && !CompleteText ? "English fallback" : "Русское описание", production_companies = new[] { new { id = 17, name = "Studio" } }, credits = new { cast = new[] { new { id = PersonId, name = "Actor", order = 0 } } } });

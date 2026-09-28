@@ -146,7 +146,6 @@ public sealed class MovieTextLocalizationTests
         Assert.True(configuration.EnableRussianOverviews);
         Assert.True(configuration.EnableRussianTaglines);
         Assert.True(configuration.EnableRussianGenres);
-        Assert.True(configuration.EnableRussianStudios);
         Assert.True(configuration.EnableRussianPeople);
         Assert.Equal(
             ArtworkLanguagePreference.EnglishFirst,
