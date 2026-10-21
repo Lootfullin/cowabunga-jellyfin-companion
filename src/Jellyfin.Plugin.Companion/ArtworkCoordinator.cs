@@ -32,6 +32,7 @@ public sealed class ArtworkCoordinator(
     private ArtworkQueueState _state = new();
     private bool _loaded;
     private long _lastQueueOrder;
+    private long _configurationVersion;
     private ArtworkWorkerStatus _workerStatus = new();
     internal ArtworkWorkerStatus WorkerStatus => Volatile.Read(ref _workerStatus);
     private readonly Dictionary<string, HashSet<string>> _candidates = new(StringComparer.Ordinal);
@@ -127,6 +128,56 @@ public sealed class ArtworkCoordinator(
 
     public bool Queue(Guid itemId, IEnumerable<ImageType> types, CompanionModule module)
         => QueueMany([(itemId, types)], module) > 0;
+
+    // Scheduled checks use the index diff. A configuration change and the daily
+    // recovery pass also inspect unchanged matches, without rewriting equal files.
+    internal int QueueArtworkChanges(ArtworkIndex artworkIndex)
+    {
+        var config = CompanionPlugin.GetConfiguration();
+        var signature = JsonSerializer.Serialize(new
+        {
+            config.Enabled, config.ArtworkEnabled, config.AllLibraries,
+            Libraries = config.Libraries.OrderBy(rule => rule.LibraryId).Select(rule => new { rule.LibraryId, rule.Artwork }),
+            config.CollectionArtworkEnabled, config.Posters, config.Logos,
+            config.StorageMode, config.ReplaceExistingImages, config.OverwriteExistingMediaFiles
+        });
+        bool fullCheck;
+        long version;
+        lock (_sync)
+        {
+            Load();
+            version = _configurationVersion;
+            fullCheck = _state.ArtworkConfigurationSignature != signature
+                || DateTime.UtcNow - _state.LastFullArtworkCheckUtc >= TimeSpan.FromDays(1);
+        }
+        var requests = artworkIndex.ChangedImageTypes.Select(pair =>
+            (pair.Key, (IEnumerable<ImageType>)RefreshIndexTask.FilterEnabledImageTypes(pair.Value, config)));
+        if (fullCheck)
+            requests = requests.Concat(artworkIndex.Matches.Select(pair =>
+                (pair.Key, (IEnumerable<ImageType>)RefreshIndexTask.GetRefreshImageTypes(pair.Value, config))));
+        var queued = QueueMany(requests, CompanionModule.Artwork);
+        lock (_sync)
+        {
+            if (version == _configurationVersion)
+            {
+                _state.ArtworkConfigurationSignature = signature;
+                if (fullCheck) _state.LastFullArtworkCheckUtc = DateTime.UtcNow;
+                Save();
+            }
+        }
+        return queued;
+    }
+
+    internal void InvalidateArtworkConfiguration()
+    {
+        lock (_sync)
+        {
+            Load();
+            _configurationVersion++;
+            _state.ArtworkConfigurationSignature = null;
+            Save();
+        }
+    }
 
     internal int QueueMany(IEnumerable<(Guid ItemId, IEnumerable<ImageType> Types)> requests, CompanionModule module)
     {
@@ -284,8 +335,8 @@ public sealed class ArtworkCoordinator(
                         || existingPath is not null && LibraryPolicy.ContainsPath(item.Path, existingPath)))
                 {
                     CollectionArtworkStorage.RetireAliases(item, type, existingPath!);
-                    // Also repair references left only in memory by older releases.
-                    await libraryManager.UpdateItemAsync(item, item.GetParent(), ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
+                    if (!await EnsureImageReferencePersistedAsync(item, type, existingPath!, cancellationToken).ConfigureAwait(false))
+                        return false;
                     Remember(key, source.Sha256, CompanionPlugin.ArtworkProviderName);
                     return true;
                 }
@@ -293,7 +344,8 @@ public sealed class ArtworkCoordinator(
                 if (config.StorageMode == PluginConfiguration.MediaFolderStorage && item is not BoxSet) return true;
                 using var response = await index.GetArtworkResponseAsync(index.GetArtworkUri(source.Path).AbsoluteUri, cancellationToken).ConfigureAwait(false);
                 response.EnsureSuccessStatusCode();
-                await SaveResponseAsync(item, type, response, source.Size, source.Sha256, request.Module, cancellationToken).ConfigureAwait(false);
+                if (!await SaveResponseAsync(item, type, response, source.Size, source.Sha256, request.Module, cancellationToken).ConfigureAwait(false))
+                    return false;
                 if (!LibraryPolicy.Allows(request.Module, item)) return true;
                 var savedHash = await HashAsync(item.GetImageInfo(type, 0)?.Path, cancellationToken).ConfigureAwait(false);
                 if (!string.Equals(savedHash, source.Sha256, StringComparison.OrdinalIgnoreCase)) return false;
@@ -317,7 +369,8 @@ public sealed class ArtworkCoordinator(
             if (image is null) continue;
             using var response = await provider.GetImageResponse(image.Url, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
-            await SaveResponseAsync(item, type, response, null, null, request.Module, cancellationToken).ConfigureAwait(false);
+            if (!await SaveResponseAsync(item, type, response, null, null, request.Module, cancellationToken).ConfigureAwait(false))
+                return false;
             if (!LibraryPolicy.Allows(request.Module, item)) return true;
             var savedHash = await HashAsync(item.GetImageInfo(type, 0)?.Path, cancellationToken).ConfigureAwait(false);
             if (savedHash is null) return false;
@@ -338,7 +391,7 @@ public sealed class ArtworkCoordinator(
         return directory is not null && LibraryPolicy.ContainsPath(directory, imagePath);
     }
 
-    private async Task SaveResponseAsync(BaseItem item, ImageType type, HttpResponseMessage response, long? expectedSize,
+    private async Task<bool> SaveResponseAsync(BaseItem item, ImageType type, HttpResponseMessage response, long? expectedSize,
         string? expectedHash, CompanionModule module, CancellationToken cancellationToken)
     {
         const long limit = 100 * 1024 * 1024;
@@ -365,7 +418,15 @@ public sealed class ArtworkCoordinator(
             var hash = await HashAsync(temporary, cancellationToken).ConfigureAwait(false);
             if (expectedHash is not null && !expectedHash.Equals(hash, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Image hash mismatch.");
-            if (!LibraryPolicy.Allows(module, item)) return;
+            if (!LibraryPolicy.Allows(module, item)) return true;
+            var currentPath = item.GetImageInfo(type, 0)?.Path;
+            if (string.Equals(hash, await HashAsync(currentPath, cancellationToken).ConfigureAwait(false), StringComparison.OrdinalIgnoreCase)
+                && (!CollectionArtworkStorage.UsesNativeFolder(item)
+                    || currentPath is not null && LibraryPolicy.ContainsPath(item.Path, currentPath)))
+            {
+                CollectionArtworkStorage.RetireAliases(item, type, currentPath!);
+                return await EnsureImageReferencePersistedAsync(item, type, currentPath!, cancellationToken).ConfigureAwait(false);
+            }
             await providerManager.SaveImage(item, temporary, response.Content.Headers.ContentType?.MediaType ?? "image/jpeg",
                 type, 0, CollectionArtworkStorage.UsesNativeFolder(item) ? null : false, cancellationToken).ConfigureAwait(false);
             if (item.GetImageInfo(type, 0)?.Path is { } savedPath)
@@ -373,8 +434,23 @@ public sealed class ArtworkCoordinator(
             // SaveImage changes the file and in-memory item only. Persist the new
             // image reference, just as Jellyfin's manual image download does.
             await libraryManager.UpdateItemAsync(item, item.GetParent(), ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
+            return true;
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
+    private async Task<bool> EnsureImageReferencePersistedAsync(BaseItem item, ImageType type, string path, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        // GetItemById can return a cached object changed by SaveImage in an old
+        // release. GetItemList reads the repository, so ownership hashes alone
+        // are never used as evidence that the image reference was persisted.
+        var persisted = libraryManager.GetItemList(new InternalItemsQuery { ItemIds = [item.Id] }).FirstOrDefault();
+        if (persisted is null) return false;
+        var storedPath = persisted.GetImageInfo(type, 0)?.Path;
+        if (!string.Equals(storedPath, path, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            await libraryManager.UpdateItemAsync(item, item.GetParent(), ItemUpdateType.ImageUpdate, cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
     private static async Task<string?> HashAsync(string? path, CancellationToken cancellationToken)
@@ -417,6 +493,8 @@ public sealed class ArtworkCoordinator(
 
 internal sealed class ArtworkQueueState
 {
+    public string? ArtworkConfigurationSignature { get; set; }
+    public DateTime LastFullArtworkCheckUtc { get; set; }
     public Dictionary<string, PendingArtwork> Pending { get; set; } = [];
     public Dictionary<string, ManagedArtwork> Managed { get; set; } = [];
     public Dictionary<string, ManagedArtwork> Expected { get; set; } = [];

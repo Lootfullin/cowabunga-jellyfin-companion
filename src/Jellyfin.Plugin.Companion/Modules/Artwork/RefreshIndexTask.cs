@@ -71,9 +71,9 @@ public sealed class RefreshIndexTask : IScheduledTask
                     ImageRefreshMode = MetadataRefreshMode.FullRefresh
                 }, RefreshPriority.Normal);
             }
-            var requests = _index.Matches.Select(pair => new ArtworkRefreshRequest(pair.Key, GetRefreshImageTypes(pair.Value, configuration)))
-                .Concat(_index.ChangedImageTypes.Select(pair => new ArtworkRefreshRequest(pair.Key, FilterEnabledImageTypes(pair.Value, configuration))));
-            RequeueChangedItems(requests);
+            var queued = CompanionPlugin.Images?.QueueArtworkChanges(_index) ?? 0;
+            _logger.LogInformation(
+                "Custom Artwork: новые задания изображений добавлены для {Count} позиций", queued);
             _index.AcknowledgeChanges();
             progress.Report(100);
         }

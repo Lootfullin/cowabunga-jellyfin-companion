@@ -34,6 +34,7 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         if (config.StorageMode is not (PluginConfiguration.JellyfinStorage or PluginConfiguration.MediaFolderStorage))
             throw new ArgumentException("Unknown artwork storage mode.");
         base.UpdateConfiguration(config);
+        Images?.InvalidateArtworkConfiguration();
         Policy?.Invalidate();
         Libraries?.Apply();
     }

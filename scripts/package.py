@@ -3,14 +3,14 @@ from pathlib import Path
 import datetime, hashlib, json, zipfile
 
 root = Path(__file__).resolve().parent.parent
-version = '1.0.14'
+version = '1.0.15'
 dll = root / 'src/Jellyfin.Plugin.Companion/bin/Release/net10.0/Jellyfin.Plugin.Companion.dll'
 if not dll.is_file():
     raise SystemExit('Run dotnet test -c Release for Companion.Tests before packaging.')
 output = root / 'artifacts'
 output.mkdir(exist_ok=True)
 archive = output / f'Cowabunga.Jellyfin.Companion_{version}_jellyfin-12.0.zip'
-metadata = dict(category='General', changelog='Use studio names directly from TMDB. Remove studio translation requests to Wikidata and the obsolete setting; actor name localization remains available.',
+metadata = dict(category='General', changelog='Stop recurring unchanged artwork jobs and false Kodi updates. Automatically apply new cloud images and collections, recheck settings changes, and persist image references only when needed.',
     description='Media recognition, localized metadata and Cowabunga artwork with per-library controls.',
     guid='0a281de0-d3c8-43ef-bf2d-5fac17fbb8c6', name='Cowabunga Jellyfin Companion',
     overview='Smart Resolver, Choose your Meta and Custom Artwork in one plugin.', owner='Lootfullin',

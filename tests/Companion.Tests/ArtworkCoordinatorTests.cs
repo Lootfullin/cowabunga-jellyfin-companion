@@ -62,6 +62,19 @@ public sealed class ArtworkCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task IdenticalFallbackDownloadDoesNotSaveImageOrNotifyLibraryAgain()
+    {
+        Assert.True(await _coordinator.ApplyAsync(Request(), default));
+        _context.Manager.Setup(m => m.GetItemList(It.Is<InternalItemsQuery>(q => q.ItemIds.Contains(_movie.Id)))).Returns([_movie]);
+        _providers.Invocations.Clear(); _context.Manager.Invocations.Clear();
+        Assert.True(await _coordinator.ApplyAsync(Request(), default));
+        _providers.Verify(p => p.SaveImage(It.IsAny<BaseItem>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<ImageType>(),
+            It.IsAny<int?>(), It.IsAny<bool?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _context.Manager.Verify(m => m.UpdateItemAsync(It.IsAny<BaseItem>(), It.IsAny<BaseItem>(),
+            It.IsAny<ItemUpdateType>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task DisabledOrExcludedQueuedWorkDoesNotCallProviders()
     {
         Assert.True(_coordinator.Queue(_movie.Id,[ImageType.Primary],CompanionModule.Metadata));
