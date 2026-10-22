@@ -98,7 +98,24 @@ public sealed class ArtworkImageProvider : IRemoteImageProvider, IImageProvider,
             : response;
     }
 
-    private void Add(
+    private string? GetThumbnailUrl(ArtworkManifestFile file, ImageType type)
+    {
+        var names = type == ImageType.Logo
+            ? new[] { "logo_mid", "logo_small" }
+            : new[] { "poster_mid", "poster_big", "poster_small" };
+        foreach (var name in names)
+        {
+            if (file.Previews?.TryGetValue(name, out var preview) == true
+                && ArtworkIndex.IsUsablePreview(preview))
+            {
+                return _index.GetArtworkUri(preview!.Path).AbsoluteUri;
+            }
+        }
+
+        return null;
+    }
+
+    internal void Add(
         ICollection<RemoteImageInfo> images,
         ArtworkManifestFile file,
         ImageType imageType)
@@ -111,7 +128,7 @@ public sealed class ArtworkImageProvider : IRemoteImageProvider, IImageProvider,
             {
                 ProviderName = Name,
                 Url = url,
-                ThumbnailUrl = url,
+                ThumbnailUrl = GetThumbnailUrl(file, imageType) ?? url,
                 Type = imageType,
             });
         }

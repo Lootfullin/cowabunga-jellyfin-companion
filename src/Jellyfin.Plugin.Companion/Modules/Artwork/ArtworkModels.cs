@@ -6,6 +6,9 @@ internal sealed class ArtworkRevision
 {
     [JsonPropertyName("revision")]
     public string Revision { get; set; } = string.Empty;
+
+    [JsonPropertyName("preview_schema_version")]
+    public int PreviewSchemaVersion { get; set; }
 }
 
 internal sealed class ArtworkManifest
@@ -15,6 +18,9 @@ internal sealed class ArtworkManifest
 
     [JsonPropertyName("revision")]
     public string Revision { get; set; } = string.Empty;
+
+    [JsonPropertyName("preview_schema_version")]
+    public int PreviewSchemaVersion { get; set; }
 
     [JsonPropertyName("generated_at")]
     public string GeneratedAt { get; set; } = string.Empty;
@@ -52,8 +58,32 @@ internal sealed class ArtworkManifestFile
     [JsonPropertyName("collection_key")]
     public string? CollectionKey { get; set; }
 
+    [JsonPropertyName("previews")]
+    public Dictionary<string, ArtworkPreview?>? Previews { get; set; }
+
     [JsonPropertyName("collection_part_tmdb_ids")]
     public List<int> CollectionPartTmdbIds { get; set; } = [];
+}
+
+internal sealed class ArtworkPreview
+{
+    [JsonPropertyName("path")]
+    public string Path { get; set; } = string.Empty;
+
+    [JsonPropertyName("sha256")]
+    public string Sha256 { get; set; } = string.Empty;
+
+    [JsonPropertyName("size")]
+    public long Size { get; set; }
+
+    [JsonPropertyName("width")]
+    public int Width { get; set; }
+
+    [JsonPropertyName("height")]
+    public int Height { get; set; }
+
+    [JsonPropertyName("mime")]
+    public string Mime { get; set; } = string.Empty;
 }
 
 internal sealed class ArtworkSet

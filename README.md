@@ -1,5 +1,13 @@
 # Cowabunga Jellyfin Companion
 
+## 1.0.17
+
+- В поиске изображений Custom Artwork использует готовые WebP-превью облака. При выборе сохраняется исходный JPEG/PNG полного разрешения.
+- Старые манифесты без превью и некорректные необязательные превью сохраняют рабочий оригинал. Загружаются только безопасные пути из текущего манифеста.
+- Изменения только превью не меняют отпечаток обложки и не создают обновлений для Kodi.
+- Полноразмерные WebP `poster_full` / `logo_full` создаёт Artwork Sync 1.5.12 при следующем проходе. Companion не подменяет ими JPEG/PNG для Kodi.
+
+
 ![Cowabunga](assets/cowabunga-logo.jpg)
 
 Единый плагин для **Jellyfin Server 12.0, 12.1 и 12.2** (.NET 10), объединяющий Smart Resolver, Choose your Meta и Cowabunga Custom Artwork.

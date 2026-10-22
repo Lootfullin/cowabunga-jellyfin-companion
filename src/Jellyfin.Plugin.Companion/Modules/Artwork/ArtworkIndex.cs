@@ -189,6 +189,18 @@ public sealed partial class ArtworkIndex
         return BuildUri(ServiceBaseUri, relative);
     }
 
+    // Optional derivatives must never invalidate a usable original or permit arbitrary URLs.
+    internal static bool IsUsablePreview(ArtworkPreview? preview) =>
+        preview is not null
+        && IsSafeRelativePath(preview.Path)
+        && preview.Path.StartsWith("_Previews/", StringComparison.Ordinal)
+        && preview.Path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase)
+        && preview.Mime == "image/webp"
+        && preview.Sha256 is not null && IsSha256(preview.Sha256)
+        && preview.Size is > 0 and <= MaxArtworkBytes
+        && preview.Width is > 0 and <= 16383
+        && preview.Height is > 0 and <= 16383;
+
     public async Task<HttpResponseMessage> GetArtworkResponseAsync(
         string url,
         CancellationToken cancellationToken)
@@ -240,7 +252,10 @@ public sealed partial class ArtworkIndex
             _manifest = LoadCachedManifest();
         }
 
-        if (_manifest?.Revision.Equals(revision.Revision, StringComparison.OrdinalIgnoreCase) == true)
+        // Pre-1.0.17 caches discarded previews while retaining the cloud revision.
+        // Fetch once on upgrade even when the artwork itself has not changed.
+        if (_manifest?.Revision.Equals(revision.Revision, StringComparison.OrdinalIgnoreCase) == true
+            && _manifest.PreviewSchemaVersion == revision.PreviewSchemaVersion)
         {
             return;
         }
@@ -368,7 +383,10 @@ public sealed partial class ArtworkIndex
         _byItemId = itemIds;
         _matchNewItem = item => MatchItem(item, byRelease, byCollection, byPublishedIdentity,
             byCollectionPart, byCustomCollectionKey, null);
-        _allowedPaths = manifest.Files.Select(file => file.Path).ToHashSet(StringComparer.Ordinal);
+        _allowedPaths = manifest.Files.SelectMany(file => new[] { file.Path }
+            .Concat((file.Previews?.Values ?? Enumerable.Empty<ArtworkPreview?>())
+                .Where(IsUsablePreview).Select(preview => preview!.Path)))
+            .ToHashSet(StringComparer.Ordinal);
         Count = itemIds.Count;
         ChangedItemIds = changed;
         ChangedImageTypes = changedImageTypes.ToDictionary(
