@@ -31,12 +31,14 @@ internal sealed class CompanionTestContext : IDisposable
         CompanionPlugin.Policy = new LibraryPolicy(Manager.Object);
         CompanionPlugin.Libraries = null;
         CompanionPlugin.Images = null;
+        CompanionPlugin.CollectionNames = null;
         CompanionPlugin.BlockedModules = [];
     }
     public void Dispose()
     {
         CompanionPlugin.Policy = null;
         CompanionPlugin.Images = null;
+        CompanionPlugin.CollectionNames = null;
         CompanionPlugin.Libraries = null;
         CompanionPlugin.BlockedModules = [];
         if (Directory.Exists(Root)) Directory.Delete(Root, true);

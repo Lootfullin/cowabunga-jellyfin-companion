@@ -54,11 +54,13 @@ public sealed class ReconcileCollectionMetadataTask : IScheduledTask
         CompanionPlugin.Instance?.DataFolderPath ?? Path.GetTempPath(),
         "collection-reconciliation.v1.json");
 
-    public Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
     {
-        if (!LibraryPolicy.AllowsCollection(CompanionModule.Metadata)) return Task.CompletedTask;
+        if (!LibraryPolicy.AllowsCollection(CompanionModule.Metadata)) return;
 
         _configurationService.Apply();
+        if (CompanionPlugin.CollectionNames is { } names)
+            await names.ReconcileAsync(cancellationToken).ConfigureAwait(false);
         var localizationEnabled = CompanionPlugin.Instance?.Configuration.EnableRussianTitles == true;
 
         var query = new InternalItemsQuery
@@ -84,9 +86,10 @@ public sealed class ReconcileCollectionMetadataTask : IScheduledTask
 
         var now = DateTime.UtcNow;
         var selected = candidates
+            .Where(item => !item.IsLocked)
             .Where(item => NeedsRefresh(
                 state.Entries[item.Id],
-                localizationEnabled,
+                localizationEnabled && !item.LockedFields.Contains(MetadataField.Name),
                 MovieTextLocalization.ContainsCyrillic(item.Name),
                 now))
             .OrderBy(item => state.Entries[item.Id].NextAttemptUtc)
@@ -122,7 +125,6 @@ public sealed class ReconcileCollectionMetadataTask : IScheduledTask
                 candidates.Length);
         }
 
-        return Task.CompletedTask;
     }
 
     public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()

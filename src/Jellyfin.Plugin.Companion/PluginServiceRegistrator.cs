@@ -5,6 +5,9 @@ using Jellyfin.Plugin.SmartResolver.Modules.NestedSeries;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Resolvers;
+using MediaBrowser.Controller.Collections;
+using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.IO;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -34,17 +37,33 @@ public sealed class PluginServiceRegistrator : IPluginServiceRegistrator
         services.AddSingleton<ArtworkLibraryConfigurator>();
         services.AddSingleton<LibraryConfigurationService>();
         services.AddSingleton<ArtworkPreferenceRefreshService>();
+        services.AddSingleton<CollectionNameSynchronizer>();
+        var original = services.LastOrDefault(s => s.ServiceType == typeof(ICollectionManager));
+        if (original is not null)
+        {
+            services.Remove(original);
+            services.Add(new ServiceDescriptor(typeof(ICollectionManager), provider =>
+            {
+                var inner = original.ImplementationInstance ?? original.ImplementationFactory?.Invoke(provider)
+                    ?? ActivatorUtilities.CreateInstance(provider, original.ImplementationType!);
+                return new CollectionCreationGuard((ICollectionManager)inner, provider.GetRequiredService<ILibraryManager>(),
+                    provider.GetRequiredService<CollectionNameSynchronizer>(), provider.GetRequiredService<IFileSystem>());
+            }, original.Lifetime));
+        }
     }
 }
 
 internal sealed class CompanionStartup(LibraryPolicy policy, LibraryConfigurator configurator, ArtworkCoordinator images,
-    LegacyMigration migration, IServerApplicationHost applicationHost, ILogger<CompanionStartup> logger) : BackgroundService
+    LegacyMigration migration, IServerApplicationHost applicationHost, ILogger<CompanionStartup> logger,
+    CollectionNameSynchronizer collectionNames) : BackgroundService
 {
     public override Task StartAsync(CancellationToken cancellationToken)
     {
         CompanionPlugin.Policy = policy;
         CompanionPlugin.Libraries = configurator;
         CompanionPlugin.Images = images;
+        CompanionPlugin.CollectionNames = collectionNames;
+        collectionNames.Start();
         CompanionPlugin.BlockedModules = migration.BlockedModules();
         return base.StartAsync(cancellationToken);
     }
@@ -52,6 +71,9 @@ internal sealed class CompanionStartup(LibraryPolicy policy, LibraryConfigurator
     {
         while (!applicationHost.CoreStartupHasCompleted)
             await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken).ConfigureAwait(false);
+        try { await collectionNames.ReconcileAsync(stoppingToken).ConfigureAwait(false); }
+        catch (Exception error) when (error is not OperationCanceledException)
+        { logger.LogWarning(error, "Companion could not align collection names at startup"); }
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
         do
         {
@@ -64,6 +86,8 @@ internal sealed class CompanionStartup(LibraryPolicy policy, LibraryConfigurator
         CompanionPlugin.Policy = null;
         CompanionPlugin.Libraries = null;
         CompanionPlugin.Images = null;
+        CompanionPlugin.CollectionNames = null;
+        collectionNames.Dispose();
         return base.StopAsync(cancellationToken);
     }
 }

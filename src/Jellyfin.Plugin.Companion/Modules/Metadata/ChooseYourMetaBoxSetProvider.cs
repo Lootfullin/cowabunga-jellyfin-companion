@@ -118,7 +118,7 @@ public sealed class ChooseYourMetaBoxSetProvider
         MetadataRefreshOptions options,
         CancellationToken cancellationToken)
     {
-        if (!LibraryPolicy.Allows(CompanionModule.Metadata, item)) return ItemUpdateType.None;
+        if (!LibraryPolicy.Allows(CompanionModule.Metadata, item) || item.IsLocked) return ItemUpdateType.None;
 
         var config = Configuration;
         var apiKey = TmdbApiKeyResolver.Resolve(config);
@@ -168,22 +168,9 @@ public sealed class ChooseYourMetaBoxSetProvider
                 return changed ? ItemUpdateType.MetadataEdit : ItemUpdateType.None;
             }
 
-            var russianName = MovieTextLocalization.RussianOrNull(collection.Name);
-            if (config.EnableRussianTitles && !string.IsNullOrWhiteSpace(russianName) && item.Name != russianName)
-            {
-                item.Name = russianName;
-                changed = true;
-            }
-
-            var russianOverview = MovieTextLocalization.RussianOrNull(collection.Overview);
-            if (config.EnableRussianOverviews
-                && !string.IsNullOrWhiteSpace(russianOverview)
-                && item.Overview != russianOverview)
-            {
-                item.Overview = russianOverview;
-                changed = true;
-            }
-
+            changed |= ApplyLocalizedMetadata(item, collection, config);
+            if (CompanionPlugin.CollectionNames is { } names)
+                await names.SynchronizeMembersAsync(item, cancellationToken).ConfigureAwait(false);
             return changed ? ItemUpdateType.MetadataEdit : ItemUpdateType.None;
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -191,6 +178,30 @@ public sealed class ChooseYourMetaBoxSetProvider
             _logger.LogWarning(ex, "ChooseYourMeta: final BoxSet localization failed for TMDB {TmdbId}", tmdbId);
             return ItemUpdateType.None;
         }
+    }
+
+    internal static bool ApplyLocalizedMetadata(BoxSet item, TmdbCollectionDetails collection, PluginConfiguration config)
+    {
+        if (item.IsLocked) return false;
+        var changed = false;
+        var russianName = MovieTextLocalization.RussianOrNull(collection.Name);
+        if (config.EnableRussianTitles && !item.LockedFields.Contains(MetadataField.Name)
+            && !string.IsNullOrWhiteSpace(russianName) && item.Name != russianName)
+        {
+            item.Name = russianName;
+            changed = true;
+        }
+
+        var russianOverview = MovieTextLocalization.RussianOrNull(collection.Overview);
+        if (config.EnableRussianOverviews
+            && !item.LockedFields.Contains(MetadataField.Overview)
+            && !string.IsNullOrWhiteSpace(russianOverview)
+            && item.Overview != russianOverview)
+        {
+            item.Overview = russianOverview;
+            changed = true;
+        }
+        return changed;
     }
 
     public async Task<IEnumerable<RemoteSearchResult>> GetSearchResults(

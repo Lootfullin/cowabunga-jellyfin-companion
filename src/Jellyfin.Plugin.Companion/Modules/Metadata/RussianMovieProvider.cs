@@ -443,9 +443,9 @@ public partial class RussianMovieProvider :
             movie.SetProviderId(MetadataProvider.TmdbCollection, collectionId);
         }
 
-        movie.TmdbCollectionName = collectionName;
+        movie.TmdbCollectionName = CompanionPlugin.CollectionNames?.ResolveMovieName(movie) ?? collectionName;
         return !string.Equals(previousId, collectionId, StringComparison.Ordinal)
-            || !string.Equals(previousName, collectionName, StringComparison.Ordinal);
+            || !string.Equals(previousName, movie.TmdbCollectionName, StringComparison.Ordinal);
     }
 
     internal static bool ApplyReleaseDate(Movie movie, string? releaseDate)

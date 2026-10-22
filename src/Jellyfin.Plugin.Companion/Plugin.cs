@@ -16,6 +16,7 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     internal static LibraryPolicy? Policy { get; set; }
     internal static LibraryConfigurator? Libraries { get; set; }
     internal static ArtworkCoordinator? Images { get; set; }
+    internal static RussianMetadata.CollectionNameSynchronizer? CollectionNames { get; set; }
     internal static CompanionModule[] BlockedModules { get; set; } = [];
     public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
         : base(applicationPaths, xmlSerializer) => Instance = this;
