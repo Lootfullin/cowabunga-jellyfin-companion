@@ -1,16 +1,20 @@
 """Package an already tested Release build without modifying a Jellyfin server."""
 from pathlib import Path
-import datetime, hashlib, json, zipfile
+import argparse, datetime, hashlib, json, zipfile
 
 root = Path(__file__).resolve().parent.parent
-version = '1.0.17'
-dll = root / 'src/Jellyfin.Plugin.Companion/bin/Release/net10.0/Jellyfin.Plugin.Companion.dll'
+version = '1.0.18'
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--dll', type=Path, default=root / 'src/Jellyfin.Plugin.Companion/bin/Release/net10.0/Jellyfin.Plugin.Companion.dll')
+parser.add_argument('--output', type=Path, default=root / 'artifacts')
+args = parser.parse_args()
+dll = args.dll
 if not dll.is_file():
     raise SystemExit('Run dotnet test -c Release for Companion.Tests before packaging.')
-output = root / 'artifacts'
-output.mkdir(exist_ok=True)
+output = args.output
+output.mkdir(parents=True, exist_ok=True)
 archive = output / f'Cowabunga.Jellyfin.Companion_{version}_jellyfin-12.0.zip'
-metadata = dict(category='General', changelog='Use validated cloud WebP previews for remote-image thumbnails while retaining full-resolution JPEG/PNG downloads. Preview-only manifest changes do not trigger artwork replacement.',
+metadata = dict(category='General', changelog='Rank manual movie identification results by requested release year and add a read-only audit of movie year mismatches with TMDb suggestions.',
     description='Media recognition, localized metadata and Cowabunga artwork with per-library controls.',
     guid='0a281de0-d3c8-43ef-bf2d-5fac17fbb8c6', name='Cowabunga Jellyfin Companion',
     overview='Smart Resolver, Choose your Meta and Custom Artwork in one plugin.', owner='Lootfullin',

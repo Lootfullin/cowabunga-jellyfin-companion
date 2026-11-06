@@ -517,7 +517,7 @@ public partial class RussianMovieProvider :
         }
     }
 
-    private static HttpClientHandler CreateProxyHandler(Configuration.PluginConfiguration config)
+    internal static HttpClientHandler CreateProxyHandler(Configuration.PluginConfiguration config)
     {
         var handler = new HttpClientHandler();
 
@@ -890,14 +890,14 @@ internal sealed record MovieLookup(string Name, int? Year)
         return ambiguous ? null : best.Candidate;
     }
 
-    private static int ScoreYear(int? expected, int? actual)
+    internal static int ScoreYear(int? expected, int? actual)
     {
         if (expected is null || actual is null)
         {
             return 0;
         }
 
-        var difference = Math.Abs(expected.Value - actual.Value);
+        var difference = Math.Abs((long)expected.Value - actual.Value);
         return difference switch
         {
             0 => 2,
@@ -930,14 +930,14 @@ internal sealed record MovieLookup(string Name, int? Year)
             : 0;
     }
 
-    private static string Normalize(string? value)
+    internal static string Normalize(string? value)
     {
         return string.Concat((value ?? string.Empty)
             .ToLowerInvariant()
             .Where(char.IsLetterOrDigit));
     }
 
-    private static int? GetYear(string? releaseDate)
+    internal static int? GetYear(string? releaseDate)
     {
         return releaseDate?.Length >= 4
             && int.TryParse(releaseDate[..4], NumberStyles.None, CultureInfo.InvariantCulture, out var year)

@@ -9,7 +9,7 @@ namespace RussianMetadata;
 internal static class MovieManualSearch
 {
     internal static async Task<IReadOnlyList<RemoteSearchResult>> SearchAsync(
-        HttpClient client, string apiKey, MovieInfo info, string providerName, CancellationToken token)
+        HttpClient client, string apiKey, MovieInfo info, string providerName, CancellationToken token, int limit = 40)
     {
         var prefix = "https://api.themoviedb.org/3/";
         var key = Uri.EscapeDataString(apiKey);
@@ -37,12 +37,24 @@ internal static class MovieManualSearch
         {
             if (string.IsNullOrWhiteSpace(lookup.Name)) return [];
             var query = Uri.EscapeDataString(lookup.Name);
-            var year = lookup.Year.HasValue ? "&year=" + lookup.Year.Value.ToString(CultureInfo.InvariantCulture) : "";
             var languages = MovieTextLocalization.ContainsCyrillic(lookup.Name) ? new[] { "ru-RU", "en-US" } : new[] { "en-US", "ru-RU" };
-            var responses = await Task.WhenAll(languages.Select(language => Read<SearchResponse>(
-                $"search/movie?api_key={key}&language={language}&query={query}{year}")));
-            candidates = responses.SelectMany(response => response?.Results ?? [])
-                .Where(movie => movie.Id > 0).DistinctBy(movie => movie.Id).Take(40).ToList();
+            async Task<List<SearchMovie>> Discover(string yearParameter)
+            {
+                var responses = await Task.WhenAll(languages.Select(language => Read<SearchResponse>(
+                    $"search/movie?api_key={key}&language={language}&query={query}{yearParameter}")));
+                return responses.SelectMany(response => response?.Results ?? []).Where(movie => movie.Id > 0).ToList();
+            }
+
+            candidates = await Discover(lookup.Year is int year
+                ? "&primary_release_year=" + year.ToString(CultureInfo.InvariantCulture) : "");
+            if (lookup.Year is int expected && !candidates.Any(movie => MovieLookup.GetYear(movie.ReleaseDate) == expected))
+            {
+                candidates.AddRange(await Discover(""));
+            }
+
+            candidates = candidates
+                .OrderByDescending(movie => MovieLookup.ScoreYear(lookup.Year, MovieLookup.GetYear(movie.ReleaseDate)))
+                .DistinctBy(movie => movie.Id).Take(limit).ToList();
         }
 
         // Search language can change the set of matches, not just their labels.
@@ -53,7 +65,7 @@ internal static class MovieManualSearch
             await gate.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                var localized = await Read<SearchMovie>($"movie/{candidate.Id}?api_key={key}&language=ru-RU");
+                var localized = tmdbId is > 0 ? candidate : await Read<SearchMovie>($"movie/{candidate.Id}?api_key={key}&language=ru-RU");
                 var name = MovieTextLocalization.RussianOrNull(localized?.Title)
                     ?? candidate.Title ?? candidate.OriginalTitle ?? "Unknown";
                 var date = localized?.ReleaseDate ?? candidate.ReleaseDate;
@@ -63,7 +75,7 @@ internal static class MovieManualSearch
                     Name = name,
                     Overview = MovieTextLocalization.RussianOrNull(localized?.Overview) ?? candidate.Overview,
                     SearchProviderName = providerName,
-                    ProductionYear = date?.Length >= 4 && int.TryParse(date[..4], out var year) ? year : null,
+                    ProductionYear = MovieLookup.GetYear(date),
                     ImageUrl = string.IsNullOrWhiteSpace(poster) ? null : "https://image.tmdb.org/t/p/w500" + poster
                 };
                 result.ProviderIds["Tmdb"] = candidate.Id.ToString(CultureInfo.InvariantCulture);
@@ -71,7 +83,7 @@ internal static class MovieManualSearch
             }
             finally { gate.Release(); }
         }));
-        return results;
+        return results.OrderByDescending(movie => MovieLookup.ScoreYear(lookup.Year, movie.ProductionYear)).ToArray();
     }
 
     private sealed class SearchResponse { public List<SearchMovie>? Results { get; set; } }

@@ -126,6 +126,16 @@
                         обновите фильм с включённой заменой изображений.
                     </div>
 
+                    <h3>Проверка годов фильмов</h3>
+                    <p>Сравнивает явно указанный год в имени файла с годом, сохранённым в Jellyfin.
+                        Показывает расхождения больше одного года в медиатеках, где включён модуль метаданных.
+                        Проверка ничего не меняет. Подходящий фильм можно выбрать через «Идентифицировать».</p>
+                    <button id="CheckMovieYears" is="emby-button" type="button" class="raised block">
+                        <span>Проверить годы фильмов</span>
+                    </button>
+                    <div id="MovieYearAuditStatus" class="fieldDescription" role="status"></div>
+                    <ul id="MovieYearAuditResults"></ul>
+
                     <h3>Автоматическая настройка библиотек</h3>
                     <p>
                         Применяет сохранённый выбор модулей и медиатек с главной страницы Companion.
@@ -286,6 +296,83 @@
                     e.preventDefault();
                     return false;
                 });
+
+            function auditValue(item, key) {
+                return item[key] ?? item[key[0].toUpperCase() + key.slice(1)];
+            }
+
+            function showMovieYearMismatch(list, mismatch) {
+                var row = document.createElement('li');
+                var summary = document.createElement('p');
+                var file = auditValue(mismatch, 'fileName');
+                var year = auditValue(mismatch, 'fileYear');
+                var imdb = auditValue(mismatch, 'imdbId');
+                summary.textContent = file + ': в имени ' + year + ', в Jellyfin '
+                    + auditValue(mismatch, 'savedYear') + ' (TMDb ' + auditValue(mismatch, 'tmdbId')
+                    + (imdb ? ', IMDb ' + imdb : '') + ')';
+                row.appendChild(summary);
+
+                var button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'raised';
+                button.textContent = 'Найти кандидатов';
+                row.appendChild(button);
+                var candidates = document.createElement('p');
+                candidates.setAttribute('role', 'status');
+                row.appendChild(candidates);
+                button.addEventListener('click', async function () {
+                    button.disabled = true;
+                    candidates.textContent = 'Поиск в TMDb…';
+                    try {
+                        var id = encodeURIComponent(auditValue(mismatch, 'itemId'));
+                        var results = await ApiClient.ajax({
+                            url: ApiClient.getUrl('ChooseYourMeta/MovieYearAudit/' + id + '/Candidates'),
+                            type: 'GET',
+                            dataType: 'json'
+                        });
+                        candidates.textContent = results.length
+                            ? results.map(function (movie) {
+                                var ids = auditValue(movie, 'providerIds') || {};
+                                return auditValue(movie, 'name') + ' (' + auditValue(movie, 'productionYear')
+                                    + ', TMDb ' + (ids.Tmdb || ids.tmdb) + ')';
+                            }).join('; ')
+                            : 'TMDb не вернул кандидатов с близким годом.';
+                    } catch {
+                        candidates.textContent = 'Не удалось получить кандидатов. Проверьте доступ к TMDb и повторите.';
+                    } finally {
+                        button.disabled = false;
+                    }
+                });
+                list.appendChild(row);
+            }
+
+            document.getElementById('CheckMovieYears').addEventListener('click', async function () {
+                var button = this;
+                var status = document.getElementById('MovieYearAuditStatus');
+                var list = document.getElementById('MovieYearAuditResults');
+                button.disabled = true;
+                list.replaceChildren();
+                status.textContent = 'Проверяю медиатеки…';
+                try {
+                    var result = await ApiClient.ajax({
+                        url: ApiClient.getUrl('ChooseYourMeta/MovieYearAudit'),
+                        type: 'GET',
+                        dataType: 'json'
+                    });
+                    if (!auditValue(result, 'enabled')) {
+                        status.textContent = 'Модуль метаданных выключен.';
+                        return;
+                    }
+                    var mismatches = auditValue(result, 'mismatches') || [];
+                    status.textContent = 'Просмотрено фильмов: ' + auditValue(result, 'moviesChecked')
+                        + '. Расхождений: ' + mismatches.length + '.';
+                    mismatches.forEach(function (mismatch) { showMovieYearMismatch(list, mismatch); });
+                } catch {
+                    status.textContent = 'Не удалось проверить годы фильмов.';
+                } finally {
+                    button.disabled = false;
+                }
+            });
 
             document.getElementById('ConfigureLibraries')
                 .addEventListener('click', function () {
