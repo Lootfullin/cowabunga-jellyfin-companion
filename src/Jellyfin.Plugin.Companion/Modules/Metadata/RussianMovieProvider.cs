@@ -87,30 +87,14 @@ public partial class RussianMovieProvider :
                 "application/json");
             httpClient.Timeout = TimeSpan.FromSeconds(5);
 
-            if (!string.IsNullOrWhiteSpace(imdbId))
+            var verifiedId = await FindMovieByImdbAsync(httpClient, tmdbApiKey, imdbId, cancellationToken);
+            if (verifiedId is int exactTmdbId && tmdbId != exactTmdbId)
             {
-                var findUrl = $"{TmdbApiBase}/find/{Uri.EscapeDataString(imdbId)}?api_key={Uri.EscapeDataString(tmdbApiKey)}&external_source=imdb_id";
-                using var findResponse = await httpClient.GetAsync(findUrl, cancellationToken);
-                if (findResponse.IsSuccessStatusCode)
-                {
-                    var findJson = await findResponse.Content.ReadAsStringAsync(cancellationToken);
-                    var find = JsonSerializer.Deserialize<TmdbFindResult>(findJson, JsonOptions.Default);
-                    if (find?.MovieResults is { Count: 1 })
-                    {
-                        var exactTmdbId = find.MovieResults[0].Id;
-                        if (tmdbId != exactTmdbId)
-                        {
-                            _logger.LogWarning(
-                                "ChooseYourMeta: correcting movie TMDB ID {OldTmdbId} -> {NewTmdbId} using IMDb {ImdbId}",
-                                tmdbId,
-                                exactTmdbId,
-                                imdbId);
-                            item.SetProviderId(MetadataProvider.Tmdb, exactTmdbId.ToString(CultureInfo.InvariantCulture));
-                            tmdbId = exactTmdbId;
-                            identityChanged = true;
-                        }
-                    }
-                }
+                _logger.LogWarning(
+                    "ChooseYourMeta: correcting movie TMDB ID {OldTmdbId} -> {NewTmdbId} using IMDb {ImdbId}",
+                    tmdbId, exactTmdbId, imdbId);
+                tmdbId = exactTmdbId;
+                identityChanged = true;
             }
 
             if (tmdbId is null)
@@ -140,6 +124,9 @@ public partial class RussianMovieProvider :
             {
                 return ItemUpdateType.None;
             }
+
+            if (identityChanged)
+                item.SetProviderId(MetadataProvider.Tmdb, tmdbId.Value.ToString(CultureInfo.InvariantCulture));
 
             var changed = identityChanged
                 | ApplyTmdbCollection(item, details.BelongsToCollection);
@@ -249,6 +236,32 @@ public partial class RussianMovieProvider :
         return result;
     }
 
+    private async Task<int?> FindMovieByImdbAsync(
+        HttpClient client, string apiKey, string? imdbId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(imdbId)) return null;
+
+        try
+        {
+            var url = $"{TmdbApiBase}/find/{Uri.EscapeDataString(imdbId)}?api_key={Uri.EscapeDataString(apiKey)}&external_source=imdb_id";
+            using var response = await client.GetAsync(url, cancellationToken);
+            if (!response.IsSuccessStatusCode) return null;
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            var result = JsonSerializer.Deserialize<TmdbFindResult>(json, JsonOptions.Default);
+            return result?.MovieResults is [{ Id: > 0 } movie] ? movie.Id : null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException
+            || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _logger.LogWarning(
+                "ChooseYourMeta: IMDb cross-check for {ImdbId} failed ({ErrorType}); using the regular TMDB lookup",
+                imdbId, ex.GetType().Name);
+            return null;
+        }
+    }
+
     private async Task<bool> TryTmdbMovie(
         int? knownTmdbId,
         string? imdbId,
@@ -271,29 +284,12 @@ public partial class RussianMovieProvider :
             httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json");
             httpClient.Timeout = TimeSpan.FromSeconds(5);
 
-            int? resolvedTmdbId = null;
-            if (!string.IsNullOrEmpty(imdbId))
+            var resolvedTmdbId = await FindMovieByImdbAsync(httpClient, tmdbApiKey, imdbId, cancellationToken);
+            if (resolvedTmdbId is not null && knownTmdbId is not null && resolvedTmdbId != knownTmdbId)
             {
-                var findUrl = $"{TmdbApiBase}/find/{imdbId}?api_key={Uri.EscapeDataString(tmdbApiKey)}&external_source=imdb_id";
-                using var findResponse = await httpClient.GetAsync(findUrl, cancellationToken);
-                if (findResponse.IsSuccessStatusCode)
-                {
-                    var findJson = await findResponse.Content.ReadAsStringAsync(cancellationToken);
-                    var findData = JsonSerializer.Deserialize<TmdbFindResult>(findJson, JsonOptions.Default);
-                    resolvedTmdbId = findData?.MovieResults is { Count: 1 }
-                        ? findData.MovieResults[0].Id
-                        : null;
-                    if (resolvedTmdbId is not null
-                        && knownTmdbId is not null
-                        && resolvedTmdbId != knownTmdbId)
-                    {
-                        _logger.LogWarning(
-                            "ChooseYourMeta: correcting movie TMDB ID {OldTmdbId} -> {NewTmdbId} using IMDb {ImdbId}",
-                            knownTmdbId,
-                            resolvedTmdbId,
-                            imdbId);
-                    }
-                }
+                _logger.LogWarning(
+                    "ChooseYourMeta: correcting movie TMDB ID {OldTmdbId} -> {NewTmdbId} using IMDb {ImdbId}",
+                    knownTmdbId, resolvedTmdbId, imdbId);
             }
 
             // A TMDB ID already stored by Jellyfin is preferable to a name

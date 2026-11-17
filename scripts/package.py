@@ -3,7 +3,7 @@ from pathlib import Path
 import argparse, datetime, hashlib, json, zipfile
 
 root = Path(__file__).resolve().parent.parent
-version = '1.0.18'
+version = '1.0.19'
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--dll', type=Path, default=root / 'src/Jellyfin.Plugin.Companion/bin/Release/net10.0/Jellyfin.Plugin.Companion.dll')
 parser.add_argument('--output', type=Path, default=root / 'artifacts')
@@ -14,7 +14,7 @@ if not dll.is_file():
 output = args.output
 output.mkdir(parents=True, exist_ok=True)
 archive = output / f'Cowabunga.Jellyfin.Companion_{version}_jellyfin-12.0.zip'
-metadata = dict(category='General', changelog='Rank manual movie identification results by requested release year and add a read-only audit of movie year mismatches with TMDb suggestions.',
+metadata = dict(category='General', changelog='Continue automatic movie metadata lookup when the optional IMDb cross-check fails.',
     description='Media recognition, localized metadata and Cowabunga artwork with per-library controls.',
     guid='0a281de0-d3c8-43ef-bf2d-5fac17fbb8c6', name='Cowabunga Jellyfin Companion',
     overview='Smart Resolver, Choose your Meta and Custom Artwork in one plugin.', owner='Lootfullin',

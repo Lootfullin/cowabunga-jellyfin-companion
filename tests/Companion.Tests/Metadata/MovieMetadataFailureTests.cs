@@ -97,6 +97,50 @@ public sealed class MovieMetadataFailureTests
         Assert.Equal(locked ? "Space Jam" : "Космический Джем", movie.Name);
     }
 
+    [Theory]
+    [InlineData("find-timeout")]
+    [InlineData("find-unavailable")]
+    [InlineData("find-invalid-json")]
+    public async Task ImdbCrossCheckFailureDoesNotBlockAutomaticMovieLocalization(string failure)
+    {
+        using var context = new CompanionTestContext();
+        context.Config.TmdbApiKey = "test";
+        context.Config.EnableRussianPeople = false;
+        var handler = new MetadataHandler(failure, 2300, "Космический Джем", 1996) { CompleteText = true };
+        var provider = CreateProvider(handler);
+        var info = new MovieInfo { Name = "Space Jam", Path = Path.Combine(context.Root, "Space Jam (1996).mkv") };
+        info.ProviderIds["Tmdb"] = "2300";
+        info.ProviderIds["Imdb"] = "tt0117705";
+
+        var result = await provider.GetMetadata(info, default);
+        var movie = new Movie { Name = info.Name, Path = info.Path };
+        movie.SetProviderId("Tmdb", "2300");
+        movie.SetProviderId("Imdb", "tt0117705");
+        await provider.FetchAsync(movie, new MetadataRefreshOptions(Moq.Mock.Of<IDirectoryService>()), default);
+
+        Assert.True(result.HasMetadata);
+        Assert.Equal("Космический Джем", result.Item.Name);
+        Assert.Equal("Космический Джем", movie.Name);
+        Assert.Equal("2300", movie.GetProviderId("Tmdb"));
+        Assert.Equal("Русское описание", movie.Overview);
+    }
+
+    [Fact]
+    public async Task CancellationDuringImdbCrossCheckDoesNotContinueToDetails()
+    {
+        using var context = new CompanionTestContext();
+        context.Config.TmdbApiKey = "test";
+        using var cancellation = new CancellationTokenSource();
+        var handler = new MetadataHandler("find-timeout", 2300, "Космический Джем", 1996) { CancelCaller = cancellation };
+        var movie = new Movie { Path = Path.Combine(context.Root, "movie.mkv") };
+        movie.SetProviderId("Tmdb", "2300");
+        movie.SetProviderId("Imdb", "tt0117705");
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => CreateProvider(handler).FetchAsync(
+            movie, new MetadataRefreshOptions(Moq.Mock.Of<IDirectoryService>()), cancellation.Token));
+        Assert.DoesNotContain(handler.RequestedUrls, url => url.Contains("/movie/2300"));
+    }
+
     private static RussianMovieProvider CreateProvider(MetadataHandler handler) =>
         new(new ClientFactory(handler), NullLogger<RussianMovieProvider>.Instance, _ => new HttpClient(handler, false));
 
@@ -117,6 +161,18 @@ public sealed class MovieMetadataFailureTests
         {
             var url = Uri.UnescapeDataString(request.RequestUri!.ToString());
             RequestedUrls.Add(url);
+            if (url.Contains("/find/") && failure.StartsWith("find-", StringComparison.Ordinal))
+            {
+                if (failure == "find-timeout")
+                {
+                    CancelCaller?.Cancel();
+                    throw new TaskCanceledException("Simulated HttpClient.Timeout", new TimeoutException(), token);
+                }
+                if (failure == "find-unavailable")
+                    throw new HttpRequestException("Simulated upstream connection failure");
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("invalid json") });
+            }
+
             string json;
             if (url.Contains("api.themoviedb.org"))
                 json = JsonSerializer.Serialize(new { id, title, imdb_id = "tt0117705", release_date = $"{year}-11-15", overview = failure == "fallback" && !CompleteText ? "English fallback" : "Русское описание", production_companies = new[] { new { id = 17, name = "Studio" } }, credits = new { cast = new[] { new { id = PersonId, name = "Actor", order = 0 } } } });
